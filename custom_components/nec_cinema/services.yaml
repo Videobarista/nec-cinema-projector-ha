@@ -1,0 +1,72 @@
+select_title:
+  target:
+    entity:
+      integration: nec_cinema
+      domain: media_player
+  fields:
+    title:
+      required: true
+      example: 3
+      selector:
+        number:
+          min: 0
+          max: 99
+          mode: box
+
+select_macro:
+  target:
+    entity:
+      integration: nec_cinema
+      domain: media_player
+  fields:
+    macro:
+      required: true
+      example: 1
+      selector:
+        number:
+          min: 1
+          max: 20
+          mode: box
+
+picture_mute:
+  target:
+    entity:
+      integration: nec_cinema
+      domain: media_player
+  fields:
+    enabled:
+      required: true
+      selector:
+        boolean:
+
+lens_control:
+  target:
+    entity:
+      integration: nec_cinema
+      domain: media_player
+  fields:
+    axis:
+      required: true
+      selector:
+        select:
+          options:
+            - zoom
+            - focus
+            - shift_h
+            - shift_v
+    direction:
+      required: true
+      selector:
+        select:
+          options:
+            - plus
+            - minus
+    duration:
+      required: false
+      default: 0.25
+      selector:
+        select:
+          options:
+            - "0.25"
+            - "0.5"
+            - "1.0"

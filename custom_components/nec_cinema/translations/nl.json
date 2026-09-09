@@ -1,0 +1,129 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sharp NEC cinemaprojector",
+        "description": "Vul het IP-adres van de projectorkop in. Het cinema-besturingsprotocol gebruikt TCP-poort 43728. Laat de projector-ID op 0 staan, tenzij je meerdere projectoren op één besturingslijn aanspreekt.",
+        "data": {
+          "host": "IP-adres",
+          "port": "Poort",
+          "name": "Naam",
+          "projector_id": "Projector-ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Geen antwoord op de besturingspoort. Controleer het IP-adres en of externe besturing op de projector aanstaat.",
+      "refused": "De projector antwoordde wel, maar weigerde het commando."
+    },
+    "abort": {
+      "already_configured": "Deze projector is al ingesteld."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties",
+        "description": "Macro's schrijf je als kommagescheiden lijst, bijvoorbeeld: 1: Flat, 2: Scope, 3: Alternatieve content. Alleen de macro's die je hier noemt verschijnen in de macro-keuzelijst.",
+        "data": {
+          "scan_interval": "Pollinterval (seconden)",
+          "macros": "Preset- (macro)toetsen"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "light_on": { "name": "Lichtbron" },
+      "problem": { "name": "Projectorstoring" },
+      "test_pattern": { "name": "Testbeeld" },
+      "imb_selected": { "name": "Mediablock geselecteerd" },
+      "connectivity": { "name": "Besturingspoort" }
+    },
+    "cover": {
+      "douser": { "name": "Douser" }
+    },
+    "switch": {
+      "picture_mute": { "name": "Beeld mute" },
+      "douser_open": { "name": "Douser open" }
+    },
+    "select": {
+      "macro": { "name": "Macro" }
+    },
+    "sensor": {
+      "process_status": {
+        "name": "Status",
+        "state": {
+          "standby": "Stand-by",
+          "power_on_protect": "Opstarten",
+          "ignition": "Ontsteken",
+          "power_on_running": "Starten",
+          "running_light_on": "In bedrijf, licht aan",
+          "cooling": "Koelen",
+          "reset_wait": "Wacht op reset",
+          "fan_stop_error": "Ventilator gestopt",
+          "lamp_retry": "Lamp opnieuw ontsteken",
+          "light_error": "Storing lichtbron",
+          "running_light_off": "In bedrijf, licht uit",
+          "unknown_state": "Onbekend"
+        }
+      },
+      "light_hours": { "name": "Branduren lichtbron" },
+      "light_power": { "name": "Lichtopbrengst" },
+      "cooling_remaining": { "name": "Resterende koeltijd" },
+      "current_title": { "name": "Huidige titel" },
+      "errors": { "name": "Actieve fouten" },
+      "last_seen": { "name": "Laatst gezien" }
+    }
+  },
+  "services": {
+    "select_title": {
+      "name": "Titel kiezen",
+      "description": "Kiest een regel uit de titellijst van de projector.",
+      "fields": {
+        "title": {
+          "name": "Titelnummer",
+          "description": "Positie in de titellijst, 0 tot en met 99."
+        }
+      }
+    },
+    "select_macro": {
+      "name": "Macro kiezen",
+      "description": "Drukt een van de preset- (macro)toetsen van de projector in.",
+      "fields": {
+        "macro": {
+          "name": "Macrotoets",
+          "description": "Presettoets 1 tot en met 20. Oudere modellen ondersteunen 1 tot 8 of 1 tot 16."
+        }
+      }
+    },
+    "picture_mute": {
+      "name": "Beeld mute",
+      "description": "Zet het beeld elektronisch op zwart. De douser beweegt niet mee.",
+      "fields": {
+        "enabled": {
+          "name": "Gemute",
+          "description": "Zet de beeld-mute aan of uit."
+        }
+      }
+    },
+    "lens_control": {
+      "name": "Lensbesturing",
+      "description": "Laat de lensmotor kort lopen.",
+      "fields": {
+        "axis": {
+          "name": "As",
+          "description": "Zoom, focus, horizontale of verticale shift."
+        },
+        "direction": {
+          "name": "Richting",
+          "description": "Naar plus of naar min."
+        },
+        "duration": {
+          "name": "Duur",
+          "description": "Looptijd van de motor in seconden: 0,25, 0,5 of 1."
+        }
+      }
+    }
+  }
+}

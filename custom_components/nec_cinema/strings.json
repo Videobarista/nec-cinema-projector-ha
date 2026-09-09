@@ -1,0 +1,129 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sharp NEC cinema projector",
+        "description": "Enter the IP address of the projector head. The cinema control protocol uses TCP port 43728. Leave the projector ID at 0 unless you address several projectors on one control line.",
+        "data": {
+          "host": "IP address",
+          "port": "Port",
+          "name": "Name",
+          "projector_id": "Projector ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No answer on the control port. Check the IP address and whether external control is enabled on the projector.",
+      "refused": "The projector answered but refused the command."
+    },
+    "abort": {
+      "already_configured": "This projector is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Macros are written as a comma separated list, for example: 1: Flat, 2: Scope, 3: Alternative content. Only the macros you list here appear in the macro select.",
+        "data": {
+          "scan_interval": "Polling interval (seconds)",
+          "macros": "Preset (macro) keys"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "light_on": { "name": "Light source" },
+      "problem": { "name": "Projector error" },
+      "test_pattern": { "name": "Test pattern" },
+      "imb_selected": { "name": "Media block selected" },
+      "connectivity": { "name": "Control port" }
+    },
+    "cover": {
+      "douser": { "name": "Douser" }
+    },
+    "switch": {
+      "picture_mute": { "name": "Picture mute" },
+      "douser_open": { "name": "Douser open" }
+    },
+    "select": {
+      "macro": { "name": "Macro" }
+    },
+    "sensor": {
+      "process_status": {
+        "name": "Status",
+        "state": {
+          "standby": "Standby",
+          "power_on_protect": "Powering up",
+          "ignition": "Ignition",
+          "power_on_running": "Starting",
+          "running_light_on": "Running, light on",
+          "cooling": "Cooling",
+          "reset_wait": "Waiting for reset",
+          "fan_stop_error": "Fan stopped",
+          "lamp_retry": "Lamp retry",
+          "light_error": "Light source error",
+          "running_light_off": "Running, light off",
+          "unknown_state": "Unknown"
+        }
+      },
+      "light_hours": { "name": "Light source hours" },
+      "light_power": { "name": "Light output" },
+      "cooling_remaining": { "name": "Cooling remaining" },
+      "current_title": { "name": "Current title" },
+      "errors": { "name": "Active errors" },
+      "last_seen": { "name": "Last seen" }
+    }
+  },
+  "services": {
+    "select_title": {
+      "name": "Select title",
+      "description": "Selects an entry from the projector's title list.",
+      "fields": {
+        "title": {
+          "name": "Title number",
+          "description": "Position in the title list, 0 to 99."
+        }
+      }
+    },
+    "select_macro": {
+      "name": "Select macro",
+      "description": "Presses one of the preset (macro) keys of the projector.",
+      "fields": {
+        "macro": {
+          "name": "Macro key",
+          "description": "Preset key 1 to 20. Older models support 1 to 8 or 1 to 16."
+        }
+      }
+    },
+    "picture_mute": {
+      "name": "Picture mute",
+      "description": "Blanks the picture electronically. The douser is not moved.",
+      "fields": {
+        "enabled": {
+          "name": "Muted",
+          "description": "Turn the picture mute on or off."
+        }
+      }
+    },
+    "lens_control": {
+      "name": "Lens control",
+      "description": "Drives the lens motor for a short time.",
+      "fields": {
+        "axis": {
+          "name": "Axis",
+          "description": "Zoom, focus, horizontal shift or vertical shift."
+        },
+        "direction": {
+          "name": "Direction",
+          "description": "Drive towards plus or minus."
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Motor run time in seconds: 0.25, 0.5 or 1."
+        }
+      }
+    }
+  }
+}
