@@ -1,12 +1,14 @@
 {
   "domain": "nec_cinema",
   "name": "Sharp NEC Cinema Projector",
-  "codeowners": ["@VideoBarista"],
+  "codeowners": [
+    "@VideoBarista"
+  ],
   "config_flow": true,
-  "documentation": "https://github.com/HuisAutomatisering/nec-cinema-projector-ha",
+  "documentation": "https://github.com/Videobarista/nec-cinema-projector-ha",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/HuisAutomatisering/nec-cinema-projector-ha/issues",
+  "issue_tracker": "https://github.com/Videobarista/nec-cinema-projector-ha/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.1"
 }

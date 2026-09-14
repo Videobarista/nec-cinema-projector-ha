@@ -70,8 +70,8 @@ class NecClient:
         try:
             writer.close()
             await writer.wait_closed()
-        except (OSError, asyncio.TimeoutError):
-            pass
+        except (OSError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("error while closing the connection: %s", err)
 
     async def _connect(self) -> None:
         """Open the socket if it is not open yet."""
@@ -99,18 +99,20 @@ class NecClient:
 
     async def _request(self, id1: int, id2: int, data: bytes) -> Response:
         await self._connect()
-        assert self._reader is not None and self._writer is not None
+        reader, writer = self._reader, self._writer
+        if reader is None or writer is None:
+            raise NecError("no connection available")
         frame = build_frame(id1, id2, data, projector_id=self._projector_id)
         _LOGGER.debug("-> %s", frame.hex(" "))
         try:
-            self._writer.write(frame)
-            await self._writer.drain()
+            writer.write(frame)
+            await writer.drain()
         except (OSError, asyncio.TimeoutError) as err:
             raise NecError(f"send failed: {err}") from err
 
         # Skip any stale frame that does not belong to this request.
         for _ in range(4):
-            response = await self._read_frame()
+            response = await self._read_frame(reader)
             if response.id2 == (id2 & 0xFF) and (response.id1 & ACK_BIT):
                 if response.is_nak:
                     raise NecNakError(response.error_text, response.error_code)
@@ -118,14 +120,11 @@ class NecClient:
             _LOGGER.debug("discarding unexpected frame id1=%02X id2=%02X", response.id1, response.id2)
         raise NecError("no matching response")
 
-    async def _read_frame(self) -> Response:
-        assert self._reader is not None
+    async def _read_frame(self, reader: asyncio.StreamReader) -> Response:
         try:
-            header = await asyncio.wait_for(
-                self._reader.readexactly(HEADER_LENGTH), self._timeout
-            )
+            header = await asyncio.wait_for(reader.readexactly(HEADER_LENGTH), self._timeout)
             tail = await asyncio.wait_for(
-                self._reader.readexactly(data_length(header) + 1), self._timeout
+                reader.readexactly(data_length(header) + 1), self._timeout
             )
         except asyncio.IncompleteReadError as err:
             raise NecError("connection closed by projector") from err
