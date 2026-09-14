@@ -1,7 +1,6 @@
 # Sharp NEC Cinema Projector for Home Assistant
 
 [![Release](https://img.shields.io/github/v/release/Videobarista/nec-cinema-projector-ha)](https://github.com/Videobarista/nec-cinema-projector-ha/releases)
-(https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/test.yml)
 [![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
 [![HACS](https://img.shields.io/badge/HACS-custom-orange)](https://hacs.xyz/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
