@@ -1,5 +1,11 @@
 # Sharp NEC Cinema Projector for Home Assistant
 
+[![Release](https://img.shields.io/github/v/release/Videobarista/nec-cinema-projector-ha)](https://github.com/Videobarista/nec-cinema-projector-ha/releases)
+[![Tests](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/test.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/test.yml)
+[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
+[![HACS](https://img.shields.io/badge/HACS-custom-orange)](https://hacs.xyz/)
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 Home Assistant custom integration for **Sharp NEC digital cinema projectors** (NC series, Series 2).
 It talks to the projector head over the documented cinema control protocol on **TCP port 43728** —
 no cloud, no vendor software, no TMS in between.
@@ -104,6 +110,20 @@ automatically:
   at debug level and do not raise errors.
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
+
+## Development
+
+The protocol layer is covered by tests that run a fake projector on a local
+socket and speak the real frame format to it. No dependencies are needed — not
+even Home Assistant:
+
+```bash
+python -m unittest discover -s tests -t tests -v
+```
+
+`pytest tests` works too. The documented command frames are asserted byte for
+byte against the protocol document, so a change that would silently stop the
+projector from answering fails the build instead.
 
 ## License
 
