@@ -37,8 +37,6 @@ async def async_setup_entry(
 class NecLightOn(NecCinemaEntity, BinarySensorEntity):
     """Whether the lamp or laser light source is lit."""
 
-    _attr_device_class = BinarySensorDeviceClass.LIGHT
-
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
         super().__init__(coordinator, "light_on")

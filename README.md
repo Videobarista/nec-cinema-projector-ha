@@ -129,6 +129,12 @@ document, so the right ones are used without guessing:
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
 
+## Brand images
+
+The `custom_components/nec_cinema/brand/` folder is where Home Assistant looks
+for the integration's icon. No images are shipped, to stay clear of
+manufacturer trademarks. See the README in that folder for the sizes if you
+want to add your own.
 
 ## License
 

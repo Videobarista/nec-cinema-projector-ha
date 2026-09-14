@@ -225,9 +225,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             data.light_hours = previous.light_hours
             data.light_power = previous.light_power
             data.light_mode = previous.light_mode
-            data.lamp_watt = previous.lamp_watt
-            data.lamp_ampere = previous.lamp_ampere
-            data.lamp_volt = previous.lamp_volt
             data.temperatures = previous.temperatures
         return data
 
@@ -244,6 +241,15 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         data.cooling = running["cooling"]
         data.cooling_remaining = running["cooling_remaining"]
         data.external_control = running["external_control"]
+
+        if self.lamp_output_kind == "watt":
+            try:
+                output = await self.projector.lamp_output()
+                data.lamp_watt = output["watt"]
+                data.lamp_ampere = output["ampere"]
+                data.lamp_volt = output["volt"]
+            except NecNakError as err:
+                _LOGGER.debug("lamp output refused: %s", err)
 
         for coro, keys in (
             (self.projector.mute_status(), ("douser_closed", "picture_mute")),
@@ -280,11 +286,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         try:
             if self.lamp_output_kind == "percent":
                 data.light_power = await self.projector.light_power()
-            elif self.lamp_output_kind == "watt":
-                output = await self.projector.lamp_output()
-                data.lamp_watt = output["watt"]
-                data.lamp_ampere = output["ampere"]
-                data.lamp_volt = output["volt"]
         except (NecError, NecNakError) as err:
             _LOGGER.debug("lamp parameter failed: %s", err)
 
@@ -334,6 +335,18 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         return result
 
     # --------------------------------------------------------------- commands
+
+    async def async_reset_light_mode(self) -> None:
+        """Put the light control mode back to following projector power.
+
+        The forced modes survive a power cycle, so a head left in "forced off"
+        would refuse to light on the next start. Clearing it around every power
+        switch keeps that from becoming a dark screen in a booth.
+        """
+        try:
+            await self.projector.set_light_mode(0x00)
+        except (NecError, NecNakError) as err:
+            _LOGGER.debug("could not reset the light control mode: %s", err)
 
     async def async_send(self, action: str, *args: Any) -> None:
         """Run a projector command and refresh straight away.
