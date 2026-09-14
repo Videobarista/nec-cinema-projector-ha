@@ -19,13 +19,16 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Entity | Type | What it does |
 | --- | --- | --- |
 | Projector | `media_player` | On/off, input port selection, current title |
+| Light source | `switch` | Light the lamp or laser without cycling projector power |
+| Light control mode | `select` | Follow power, forced on, or forced off |
 | Douser | `cover` (shutter) | Open and close the mechanical douser |
 | Douser open | `switch` | The same douser as a plain switch (disabled by default) |
 | Picture mute | `switch` | Electronic blanking, douser stays put |
 | Macro | `select` | Preset (macro) keys you named in the options |
 | Status | `sensor` | Standby, ignition, running, cooling, light error, … |
 | Light source hours | `sensor` | Lamp or laser usage time |
-| Light output | `sensor` | Configured output power in percent |
+| Light output | `sensor` | Configured output power in percent (newer heads) |
+| Lamp power / current / voltage | `sensor` | Measured by the lamp power supply (NC3240S-A, NC3200S, NC2000C, NC1200C) |
 | Cooling remaining | `sensor` | Seconds of cooling left |
 | Current title | `sensor` | Title name, with title and preset number as attributes |
 | Active errors | `sensor` | Error count, with the decoded messages as an attribute |
@@ -73,6 +76,17 @@ In the integration options you can set the polling interval and name your macro 
 
 Only the macros you list appear in the `select` entity. The service call works for all 20 regardless.
 
+## Switching the light
+
+`POWER ON` and `POWER OFF` cover the whole head. To light the lamp or laser on
+its own, the **Light source** switch uses `LAMP CONTROL MODE SET` (235-19).
+
+That command sets a mode rather than pressing a button: turning the switch off
+puts the head in "light off mode", where it stays dark even after a power cycle,
+until the switch is turned back on or the **Light control mode** select is put
+back to *Follow projector power*. If a projector refuses to ignite, check that
+select first.
+
 ## Media block (IMS / IMB)
 
 The projector protocol has **no playback commands**. Ports 43744–43759 belong to the media block
@@ -90,11 +104,16 @@ lens, port), open the douser, then start playback on the media block.
 
 ## Tested against
 
+Verified on an **NC1200C** in daily use: power, douser, light control, input selection, titles,
+errors and temperatures all confirmed against the head itself.
+
 Written against rev. 15.0 of the protocol document, which covers NC900C-A through NC2443ML,
-NP-02HD and NP-42HD. Model dependent commands are probed at startup and the integration falls back
-automatically:
+NP-02HD and NP-42HD. Model dependent commands are chosen from the availability lists in that
+document, so the right ones are used without guessing:
 
 - lamp hours: `LAMP INFORMATION REQUEST 3` (235-31), falling back to `2` (037-2) on older heads;
+- lamp output: measured watts, amps and volts via `235-1` on the four heads that support it, a
+  setting percentage via `235-29` on all others;
 - temperatures: `PARTS COUNT` / `COMMON CURRENT STATUS` (305-1, 300-20) on newer heads, falling back
   to `TEMPERATURE STATUS REQUEST 3` (078-204) on older ones.
 
@@ -102,11 +121,11 @@ automatically:
 
 - Some heads accept only one control connection at a time on port 43728. If a TMS or the NEC service
   software holds that session, the integration cannot connect until it is released.
-- The protocol offers no separate lamp/light on-off command; power on and off cover both.
 - The title list cannot be enumerated, only the current title is readable. Hence the macro naming
   in the options instead of a full list.
-- While the head is powering up or cooling down it refuses most commands. Those refusals are logged
-  at debug level and do not raise errors.
+- While the head is igniting, cooling or switching, it refuses commands with a NAK that clears by
+  itself. Those are retried for a few seconds; if the head is still busy, the action reports that
+  rather than quoting the protocol.
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
 

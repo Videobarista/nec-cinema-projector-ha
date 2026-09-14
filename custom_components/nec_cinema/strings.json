@@ -34,21 +34,50 @@
   },
   "entity": {
     "binary_sensor": {
-      "light_on": { "name": "Light source" },
-      "problem": { "name": "Projector error" },
-      "test_pattern": { "name": "Test pattern" },
-      "imb_selected": { "name": "Media block selected" },
-      "connectivity": { "name": "Control port" }
+      "light_on": {
+        "name": "Light source lit"
+      },
+      "problem": {
+        "name": "Projector error"
+      },
+      "test_pattern": {
+        "name": "Test pattern"
+      },
+      "imb_selected": {
+        "name": "Media block selected"
+      },
+      "connectivity": {
+        "name": "Control port"
+      }
     },
     "cover": {
-      "douser": { "name": "Douser" }
+      "douser": {
+        "name": "Douser"
+      }
     },
     "switch": {
-      "picture_mute": { "name": "Picture mute" },
-      "douser_open": { "name": "Douser open" }
+      "picture_mute": {
+        "name": "Picture mute"
+      },
+      "douser_open": {
+        "name": "Douser open"
+      },
+      "light": {
+        "name": "Light source"
+      }
     },
     "select": {
-      "macro": { "name": "Macro" }
+      "macro": {
+        "name": "Macro"
+      },
+      "light_mode": {
+        "name": "Light control mode",
+        "state": {
+          "standard": "Follow projector power",
+          "on": "Forced on",
+          "off": "Forced off"
+        }
+      }
     },
     "sensor": {
       "process_status": {
@@ -68,12 +97,33 @@
           "unknown_state": "Unknown"
         }
       },
-      "light_hours": { "name": "Light source hours" },
-      "light_power": { "name": "Light output" },
-      "cooling_remaining": { "name": "Cooling remaining" },
-      "current_title": { "name": "Current title" },
-      "errors": { "name": "Active errors" },
-      "last_seen": { "name": "Last seen" }
+      "light_hours": {
+        "name": "Light source hours"
+      },
+      "light_power": {
+        "name": "Light output"
+      },
+      "cooling_remaining": {
+        "name": "Cooling remaining"
+      },
+      "current_title": {
+        "name": "Current title"
+      },
+      "errors": {
+        "name": "Active errors"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "lamp_watt": {
+        "name": "Lamp power"
+      },
+      "lamp_ampere": {
+        "name": "Lamp current"
+      },
+      "lamp_volt": {
+        "name": "Lamp voltage"
+      }
     }
   },
   "services": {
@@ -124,6 +174,17 @@
           "description": "Motor run time in seconds: 0.25, 0.5 or 1."
         }
       }
+    }
+  },
+  "exceptions": {
+    "command_busy": {
+      "message": "The projector is busy starting up, cooling down or switching, and did not accept the command. Try again once it reports Running."
+    },
+    "command_refused": {
+      "message": "The projector refused the command: {reason}"
+    },
+    "command_failed": {
+      "message": "Could not reach the projector: {reason}"
     }
   }
 }

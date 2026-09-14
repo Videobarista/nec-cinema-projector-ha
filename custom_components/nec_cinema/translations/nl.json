@@ -34,21 +34,50 @@
   },
   "entity": {
     "binary_sensor": {
-      "light_on": { "name": "Lichtbron" },
-      "problem": { "name": "Projectorstoring" },
-      "test_pattern": { "name": "Testbeeld" },
-      "imb_selected": { "name": "Mediablock geselecteerd" },
-      "connectivity": { "name": "Besturingspoort" }
+      "light_on": {
+        "name": "Lichtbron brandt"
+      },
+      "problem": {
+        "name": "Projectorstoring"
+      },
+      "test_pattern": {
+        "name": "Testbeeld"
+      },
+      "imb_selected": {
+        "name": "Mediablock geselecteerd"
+      },
+      "connectivity": {
+        "name": "Besturingspoort"
+      }
     },
     "cover": {
-      "douser": { "name": "Douser" }
+      "douser": {
+        "name": "Douser"
+      }
     },
     "switch": {
-      "picture_mute": { "name": "Beeld mute" },
-      "douser_open": { "name": "Douser open" }
+      "picture_mute": {
+        "name": "Beeld mute"
+      },
+      "douser_open": {
+        "name": "Douser open"
+      },
+      "light": {
+        "name": "Lichtbron"
+      }
     },
     "select": {
-      "macro": { "name": "Macro" }
+      "macro": {
+        "name": "Macro"
+      },
+      "light_mode": {
+        "name": "Lichtbronmodus",
+        "state": {
+          "standard": "Volgt projector aan/uit",
+          "on": "Geforceerd aan",
+          "off": "Geforceerd uit"
+        }
+      }
     },
     "sensor": {
       "process_status": {
@@ -68,12 +97,33 @@
           "unknown_state": "Onbekend"
         }
       },
-      "light_hours": { "name": "Branduren lichtbron" },
-      "light_power": { "name": "Lichtopbrengst" },
-      "cooling_remaining": { "name": "Resterende koeltijd" },
-      "current_title": { "name": "Huidige titel" },
-      "errors": { "name": "Actieve fouten" },
-      "last_seen": { "name": "Laatst gezien" }
+      "light_hours": {
+        "name": "Branduren lichtbron"
+      },
+      "light_power": {
+        "name": "Lichtopbrengst"
+      },
+      "cooling_remaining": {
+        "name": "Resterende koeltijd"
+      },
+      "current_title": {
+        "name": "Huidige titel"
+      },
+      "errors": {
+        "name": "Actieve fouten"
+      },
+      "last_seen": {
+        "name": "Laatst gezien"
+      },
+      "lamp_watt": {
+        "name": "Lampvermogen"
+      },
+      "lamp_ampere": {
+        "name": "Lampstroom"
+      },
+      "lamp_volt": {
+        "name": "Lampspanning"
+      }
     }
   },
   "services": {
@@ -124,6 +174,17 @@
           "description": "Looptijd van de motor in seconden: 0,25, 0,5 of 1."
         }
       }
+    }
+  },
+  "exceptions": {
+    "command_busy": {
+      "message": "De projector is bezig met opstarten, afkoelen of schakelen en accepteerde het commando niet. Probeer het opnieuw zodra de status In bedrijf is."
+    },
+    "command_refused": {
+      "message": "De projector weigerde het commando: {reason}"
+    },
+    "command_failed": {
+      "message": "Kan de projector niet bereiken: {reason}"
     }
   }
 }

@@ -327,7 +327,53 @@ class NecProjector:
         data = (await self.client.request(0x03, 0x2F, bytes((0x1C,)))).data
         if len(data) < 6:
             return None
-        return round(u16le(data, 4) / 10, 1)
+        raw = u16le(data, 4)
+        # Most heads report in 0.1%, but the ML series and NP-02HD/NP-42HD use
+        # 0.01%. Setting power never exceeds 100%, so a value that would scale
+        # past that identifies the finer unit.
+        scale = 100 if raw / 10 > 100 else 10
+        return round(raw / scale, 1)
+
+    async def lamp_output(self) -> dict[str, float]:
+        """LAMP PARAMETER OUTPUT REQUEST (235-1.).
+
+        Only the older heads (NC3240S-A, NC3200S, NC2000C, NC1200C) answer this.
+        It reports what the lamp power supply actually measures.
+        """
+        data = (await self.client.request(0x03, 0x2F, bytes((0x00,)))).data
+        if len(data) < 7:
+            raise NecError("short lamp parameter response")
+        return {
+            "watt": float(u16le(data, 1)),
+            "ampere": float(u16le(data, 3)),
+            "volt": round(u16le(data, 5) / 10, 1),
+        }
+
+    async def light_mode(self) -> int:
+        """LAMP CONTROL MODE REQUEST (235-18.)."""
+        data = (await self.client.request(0x03, 0x2F, bytes((0x11,)))).data
+        if len(data) < 2:
+            raise NecError("short lamp control mode response")
+        return data[1]
+
+    async def set_light_mode(self, mode: int) -> None:
+        """LAMP CONTROL MODE SET (235-19.).
+
+        Mode 01H lights the lamp or laser, 02H extinguishes it and 00H returns
+        the head to following the power state. This is the only documented way
+        to switch the light without cycling projector power.
+        """
+        data = (await self.client.request(0x03, 0x2F, bytes((0x12, mode)))).data
+        if len(data) >= 2 and data[1] != 0x00:
+            raise NecNakError("projector could not change the light control mode", None)
+
+    async def light_on(self) -> None:
+        """Light the lamp or laser."""
+        await self.set_light_mode(0x01)
+
+    async def light_off(self) -> None:
+        """Extinguish the lamp or laser, leaving the projector powered."""
+        await self.set_light_mode(0x02)
 
     async def temperature_modern(self, index: int) -> float | None:
         """COMMON CURRENT STATUS REQUEST (300-20.)."""

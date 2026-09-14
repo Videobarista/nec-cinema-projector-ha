@@ -41,7 +41,7 @@ NAK_ERRORS: dict[tuple[int, int], str] = {
     (0x02, 0x00): "memory reservation error",
     (0x02, 0x01): "GPIO control enabled",
     (0x02, 0x02): "operating memory",
-    (0x02, 0x03): "setting not possible (metadata may be enabled)",
+    (0x02, 0x03): "setting not possible right now (projector busy, or metadata enabled)",
     (0x02, 0x04): "forced on-screen mute mode",
     (0x02, 0x06): "displaying a signal other than PC Viewer",
     (0x02, 0x07): "no signal",

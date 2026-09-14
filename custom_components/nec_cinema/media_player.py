@@ -17,7 +17,6 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv, entity_platform
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import NecError, NecNakError
 from .const import DOMAIN, LENS_AXES
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
@@ -126,40 +125,32 @@ class NecProjectorMediaPlayer(NecCinemaEntity, MediaPlayerEntity):
 
     # --------------------------------------------------------------- commands
 
-    async def _run(self, action: str, *args: Any) -> None:
-        try:
-            await self.coordinator.async_send(action, *args)
-        except NecNakError as err:
-            raise HomeAssistantError(f"Projector refused the command: {err}") from err
-        except NecError as err:
-            raise HomeAssistantError(f"Projector communication failed: {err}") from err
-
     async def async_turn_on(self) -> None:
         """Power the projector on."""
-        await self._run("power_on")
+        await self.async_run_command("power_on")
 
     async def async_turn_off(self) -> None:
         """Power the projector off."""
-        await self._run("power_off")
+        await self.async_run_command("power_off")
 
     async def async_select_source(self, source: str) -> None:
         """Switch the input port."""
         code = self.coordinator.source_map.get(source)
         if code is None:
             raise HomeAssistantError(f"Unknown source: {source}")
-        await self._run("select_port", code)
+        await self.async_run_command("select_port", code)
 
     async def async_select_title(self, title: int) -> None:
         """Select a title from the projector's title list."""
-        await self._run("select_title", title)
+        await self.async_run_command("select_title", title)
 
     async def async_select_macro(self, macro: int) -> None:
         """Press one of the preset (macro) keys."""
-        await self._run("select_macro", macro)
+        await self.async_run_command("select_macro", macro)
 
     async def async_picture_mute(self, enabled: bool) -> None:
         """Blank or unblank the picture electronically."""
-        await self._run("picture_mute_on" if enabled else "picture_mute_off")
+        await self.async_run_command("picture_mute_on" if enabled else "picture_mute_off")
 
     async def async_lens_control(self, axis: str, direction: str, duration: float) -> None:
         """Nudge zoom, focus or lens shift."""
@@ -167,4 +158,4 @@ class NecProjectorMediaPlayer(NecCinemaEntity, MediaPlayerEntity):
         value = steps[duration]
         if direction == "minus":
             value = {0x03: 0xFD, 0x02: 0xFE, 0x01: 0xFF}[value]
-        await self._run("lens_control", axis, value)
+        await self.async_run_command("lens_control", axis, value)

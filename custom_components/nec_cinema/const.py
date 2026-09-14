@@ -33,6 +33,20 @@ PROCESS_STATUS: Final = {
 }
 PROCESS_STATUS_UNKNOWN: Final = "unknown_state"
 
+# --- Light control mode (LAMP CONTROL MODE REQUEST/SET 235-18, 235-19) ----
+LIGHT_MODES: Final = {
+    0x00: "standard",
+    0x01: "on",
+    0x02: "off",
+}
+LIGHT_MODE_CODES: Final = {name: code for code, name in LIGHT_MODES.items()}
+LIGHT_MODE_UNKNOWN: Final = "unknown_mode"
+
+# NAK codes that mean "busy right now", worth retrying, rather than "never".
+TRANSIENT_NAK_CODES: Final = frozenset({(0x07, 0x00), (0x02, 0x02), (0x02, 0x03)})
+COMMAND_ATTEMPTS: Final = 3
+COMMAND_RETRY_DELAY: Final = 1.5
+
 # --- Ports (INPUT SW CHANGE 018 / INPUT TERMINAL REQUEST 068) --------------
 # Switching object 05H = "Port Switching", used by the NC series.
 PORT_NAMES: Final = {
@@ -128,6 +142,19 @@ LEGACY_LAMP_TYPES: Final = frozenset(
         (0x0C, 0x08, 0x0A),
         (0x0C, 0x0A, 0x0A),
         (0x0C, 0x0B, 0x0A),
+    }
+)
+
+# Models that answer LAMP PARAMETER OUTPUT REQUEST (235-1) with measured
+# watts, amps and volts. Every other head uses 235-29, which reports a
+# percentage instead. Taken from the availability lists in the document, so the
+# choice does not depend on probing a head while its lamp happens to be off.
+LEGACY_LAMP_OUTPUT_TYPES: Final = frozenset(
+    {
+        (0x0C, 0x0A, 0x0A),  # NC3240S-A
+        (0x0C, 0x05, 0x0A),  # NC3200S
+        (0x0C, 0x08, 0x0A),  # NC2000C
+        (0x0C, 0x07, 0x0A),  # NC1200C
     }
 )
 

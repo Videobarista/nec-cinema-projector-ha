@@ -11,10 +11,8 @@ from homeassistant.components.cover import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import NecError, NecNakError
 from .const import DOMAIN
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
@@ -45,18 +43,10 @@ class NecDouser(NecCinemaEntity, CoverEntity):
         """Return whether the douser blocks the light."""
         return self.coordinator.data.douser_closed
 
-    async def _run(self, action: str) -> None:
-        try:
-            await self.coordinator.async_send(action)
-        except NecNakError as err:
-            raise HomeAssistantError(f"Projector refused the command: {err}") from err
-        except NecError as err:
-            raise HomeAssistantError(f"Projector communication failed: {err}") from err
-
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the douser."""
-        await self._run("douser_open")
+        await self.async_run_command("douser_open")
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the douser."""
-        await self._run("douser_close")
+        await self.async_run_command("douser_close")

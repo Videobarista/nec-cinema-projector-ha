@@ -4,13 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import NecError, NecNakError
 from .const import DOMAIN
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
@@ -23,22 +21,50 @@ async def async_setup_entry(
 ) -> None:
     """Set up the switches."""
     coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([NecPictureMute(coordinator), NecDouserSwitch(coordinator)])
+    async_add_entities(
+        [
+            NecLightSwitch(coordinator),
+            NecPictureMute(coordinator),
+            NecDouserSwitch(coordinator),
+        ]
+    )
 
 
-class _NecSwitchBase(NecCinemaEntity, SwitchEntity):
-    """Shared error handling."""
+class NecLightSwitch(NecCinemaEntity, SwitchEntity):
+    """Light the lamp or laser without cycling projector power.
 
-    async def _run(self, action: str) -> None:
-        try:
-            await self.coordinator.async_send(action)
-        except NecNakError as err:
-            raise HomeAssistantError(f"Projector refused the command: {err}") from err
-        except NecError as err:
-            raise HomeAssistantError(f"Projector communication failed: {err}") from err
+    Uses LAMP CONTROL MODE SET (235-19), the only documented way to switch the
+    light on its own. Note that switching it off puts the head in "light off
+    mode": it stays off until this switch is turned on again, or the mode is
+    put back to standard.
+    """
+
+    _attr_device_class = SwitchDeviceClass.SWITCH
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the switch."""
+        super().__init__(coordinator, "light")
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether the light source is actually lit."""
+        return self.coordinator.data.light_on
+
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Expose the control mode the projector is in."""
+        return {"light_control_mode": self.coordinator.data.light_mode}
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Light the lamp or laser."""
+        await self.async_run_command("light_on")
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Extinguish the lamp or laser."""
+        await self.async_run_command("light_off")
 
 
-class NecPictureMute(_NecSwitchBase):
+class NecPictureMute(NecCinemaEntity, SwitchEntity):
     """Electronic picture mute (the douser stays where it is)."""
 
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
@@ -52,14 +78,14 @@ class NecPictureMute(_NecSwitchBase):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Blank the picture."""
-        await self._run("picture_mute_on")
+        await self.async_run_command("picture_mute_on")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Restore the picture."""
-        await self._run("picture_mute_off")
+        await self.async_run_command("picture_mute_off")
 
 
-class NecDouserSwitch(_NecSwitchBase):
+class NecDouserSwitch(NecCinemaEntity, SwitchEntity):
     """The douser as a plain switch: on means open, light reaches the screen."""
 
     _attr_entity_registry_enabled_default = False
@@ -76,8 +102,8 @@ class NecDouserSwitch(_NecSwitchBase):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Open the douser."""
-        await self._run("douser_open")
+        await self.async_run_command("douser_open")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Close the douser."""
-        await self._run("douser_close")
+        await self.async_run_command("douser_close")

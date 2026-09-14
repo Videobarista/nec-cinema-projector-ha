@@ -16,18 +16,24 @@ from homeassistant.util import dt as dt_util
 
 from .client import NecClient, NecError, NecNakError, NecProjector
 from .const import (
+    COMMAND_ATTEMPTS,
+    COMMAND_RETRY_DELAY,
     CONF_PROJECTOR_ID,
     DEFAULT_PORT_CODES,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     INPUT_STATUS_PORTS,
     LEGACY_LAMP_TYPES,
+    LEGACY_LAMP_OUTPUT_TYPES,
     LEGACY_TEMP_NAMES,
+    LIGHT_MODE_UNKNOWN,
+    LIGHT_MODES,
     NC_PORT_CODES,
     PORT_NAMES,
     PROCESS_STATUS,
     PROCESS_STATUS_UNKNOWN,
     SLOW_POLL_EVERY,
+    TRANSIENT_NAK_CODES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,6 +71,10 @@ class ProjectorData:
     errors: list[str] = field(default_factory=list)
     light_hours: float | None = None
     light_power: float | None = None
+    light_mode: str = LIGHT_MODE_UNKNOWN
+    lamp_watt: float | None = None
+    lamp_ampere: float | None = None
+    lamp_volt: float | None = None
     temperatures: dict[str, float | None] = field(default_factory=dict)
 
 
@@ -95,6 +105,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self.thermal_names: list[str] = []
         self._legacy_lamp = False
         self._legacy_temps = False
+        self.lamp_output_kind: str | None = None
         self._poll_count = 0
         self._first_poll_done = False
 
@@ -115,8 +126,38 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             _LOGGER.debug("projector type unavailable: %s", err)
 
         self._legacy_lamp = self.projector_type in LEGACY_LAMP_TYPES
+        await self._probe_lamp_output()
         await self._probe_sources()
         await self._probe_thermal_sensors()
+
+    async def _probe_lamp_output(self) -> None:
+        """Find out which lamp output command this head answers.
+
+        The document lists which models support which command, so use that
+        first. Probing is only a fallback for a head not in the lists, and must
+        not be trusted to distinguish "not supported" from "lamp is off".
+        """
+        if self.projector_type in LEGACY_LAMP_OUTPUT_TYPES:
+            self.lamp_output_kind = "watt"
+            return
+
+        try:
+            await self.projector.light_power()
+        except NecNakError:
+            pass
+        except NecError as err:
+            _LOGGER.debug("lamp power probe failed: %s", err)
+            return
+        else:
+            self.lamp_output_kind = "percent"
+            return
+
+        try:
+            await self.projector.lamp_output()
+        except (NecError, NecNakError) as err:
+            _LOGGER.debug("no lamp output command supported: %s", err)
+        else:
+            self.lamp_output_kind = "watt"
 
     async def _probe_sources(self) -> None:
         """Build the source list from the installed terminals."""
@@ -183,6 +224,10 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             data.errors = previous.errors
             data.light_hours = previous.light_hours
             data.light_power = previous.light_power
+            data.light_mode = previous.light_mode
+            data.lamp_watt = previous.lamp_watt
+            data.lamp_ampere = previous.lamp_ampere
+            data.lamp_volt = previous.lamp_volt
             data.temperatures = previous.temperatures
         return data
 
@@ -233,9 +278,22 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             _LOGGER.debug("lamp information failed: %s", err)
 
         try:
-            data.light_power = await self.projector.light_power()
+            if self.lamp_output_kind == "percent":
+                data.light_power = await self.projector.light_power()
+            elif self.lamp_output_kind == "watt":
+                output = await self.projector.lamp_output()
+                data.lamp_watt = output["watt"]
+                data.lamp_ampere = output["ampere"]
+                data.lamp_volt = output["volt"]
         except (NecError, NecNakError) as err:
             _LOGGER.debug("lamp parameter failed: %s", err)
+
+        try:
+            data.light_mode = LIGHT_MODES.get(
+                await self.projector.light_mode(), LIGHT_MODE_UNKNOWN
+            )
+        except (NecError, NecNakError) as err:
+            _LOGGER.debug("lamp control mode failed: %s", err)
 
         try:
             data.errors = await self._read_errors()
@@ -278,8 +336,24 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
     # --------------------------------------------------------------- commands
 
     async def async_send(self, action: str, *args: Any) -> None:
-        """Run a projector command and refresh straight away."""
+        """Run a projector command and refresh straight away.
+
+        A head that is igniting, cooling or busy refuses commands with a NAK
+        that clears by itself, so those are retried for a few seconds before
+        giving up.
+        """
         method = getattr(self.projector, action)
-        async with asyncio.timeout(20):
-            await method(*args)
+        for attempt in range(1, COMMAND_ATTEMPTS + 1):
+            try:
+                async with asyncio.timeout(20):
+                    await method(*args)
+            except NecNakError as err:
+                if err.code not in TRANSIENT_NAK_CODES or attempt == COMMAND_ATTEMPTS:
+                    raise
+                _LOGGER.debug(
+                    "%s refused (%s), retry %s of %s", action, err, attempt, COMMAND_ATTEMPTS
+                )
+                await asyncio.sleep(COMMAND_RETRY_DELAY)
+            else:
+                break
         await self.async_request_refresh()

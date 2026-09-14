@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import NecError, NecNakError
-from .const import CONF_MACROS, DOMAIN
+from .const import (
+    CONF_MACROS,
+    DOMAIN,
+    LIGHT_MODE_CODES,
+    LIGHT_MODE_UNKNOWN,
+    LIGHT_MODES,
+)
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
@@ -35,9 +41,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the macro select, if any macros are configured."""
     coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    entities: list[SelectEntity] = [NecLightModeSelect(coordinator)]
     macros = parse_macros(entry.options.get(CONF_MACROS))
     if macros:
-        async_add_entities([NecMacroSelect(coordinator, macros)])
+        entities.append(NecMacroSelect(coordinator, macros))
+    async_add_entities(entities)
 
 
 class NecMacroSelect(NecCinemaEntity, SelectEntity):
@@ -59,9 +67,25 @@ class NecMacroSelect(NecCinemaEntity, SelectEntity):
         number = next((key for key, label in self._macros.items() if label == option), None)
         if number is None:
             raise HomeAssistantError(f"Unknown macro: {option}")
-        try:
-            await self.coordinator.async_send("select_macro", number)
-        except NecNakError as err:
-            raise HomeAssistantError(f"Projector refused the command: {err}") from err
-        except NecError as err:
-            raise HomeAssistantError(f"Projector communication failed: {err}") from err
+        await self.async_run_command("select_macro", number)
+
+
+class NecLightModeSelect(NecCinemaEntity, SelectEntity):
+    """The light control mode: follow power, forced on, or forced off."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_options = list(LIGHT_MODES.values())
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the select."""
+        super().__init__(coordinator, "light_mode")
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the mode the projector reports."""
+        mode = self.coordinator.data.light_mode
+        return None if mode == LIGHT_MODE_UNKNOWN else mode
+
+    async def async_select_option(self, option: str) -> None:
+        """Set the light control mode."""
+        await self.async_run_command("set_light_mode", LIGHT_MODE_CODES[option])
