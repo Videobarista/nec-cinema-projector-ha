@@ -129,19 +129,6 @@ document, so the right ones are used without guessing:
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
 
-## Development
-
-The protocol layer is covered by tests that run a fake projector on a local
-socket and speak the real frame format to it. No dependencies are needed — not
-even Home Assistant:
-
-```bash
-python -m unittest discover -s tests -t tests -v
-```
-
-`pytest tests` works too. The documented command frames are asserted byte for
-byte against the protocol document, so a change that would silently stop the
-projector from answering fails the build instead.
 
 ## License
 
