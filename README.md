@@ -1,7 +1,7 @@
 # Sharp NEC Cinema Projector for Home Assistant
 
 [![Release](https://img.shields.io/github/v/release/Videobarista/nec-cinema-projector-ha)](https://github.com/Videobarista/nec-cinema-projector-ha/releases)
-[![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)](https://www.python.org/)
+[![Validate](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/validate.yml)
 [![HACS](https://img.shields.io/badge/HACS-custom-orange)](https://hacs.xyz/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -131,11 +131,12 @@ document, so the right ones are used without guessing:
 
 ## Brand images
 
-The `custom_components/nec_cinema/brand/` folder is where Home Assistant looks
-for the integration's icon. No images are shipped, to stay clear of
-manufacturer trademarks. See the README in that folder for the sizes if you
-want to add your own.
+`custom_components/nec_cinema/brand/` holds a plain, self-drawn projector icon.
+It is deliberately generic: the Sharp NEC marks belong to Sharp NEC Display
+Solutions and are not redistributed here. Replace those files with your own if
+you have the right to use a manufacturer's artwork; see `Brand/README.md` for
+the sizes.
 
 ## License
 
-MIT © 2026 VideoBarista
+MIT © 2026 Videobarista
