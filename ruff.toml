@@ -1,0 +1,18 @@
+target-version = "py312"
+line-length = 100
+
+[lint]
+select = [
+  "B",   # flake8-bugbear: likely bugs
+  "E",   # pycodestyle errors
+  "F",   # pyflakes: unused imports, undefined names
+  "I",   # isort: import order
+  "UP",  # pyupgrade: outdated syntax
+  "W",   # pycodestyle warnings
+]
+
+[lint.isort]
+force-sort-within-sections = true
+known-first-party = ["homeassistant"]
+combine-as-imports = true
+split-on-trailing-comma = false

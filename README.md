@@ -1,9 +1,13 @@
 # Sharp NEC Cinema Projector for Home Assistant
 
 [![Release](https://img.shields.io/github/v/release/Videobarista/nec-cinema-projector-ha)](https://github.com/Videobarista/nec-cinema-projector-ha/releases)
-[![Validate](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/validate.yml)
-[![HACS](https://img.shields.io/badge/HACS-custom-orange)](https://hacs.xyz/)
+[![Ruff](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/ruff.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/ruff.yml)
+[![hassfest](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hassfest.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hassfest.yml)
+[![HACS](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hacs.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hacs.yml)
+[![CodeQL](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/codeql.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/codeql.yml)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Videobarista&repository=nec-cinema-projector-ha&category=integration)
 
 Home Assistant custom integration for **Sharp NEC digital cinema projectors** (NC series, Series 2).
 It talks to the projector head over the documented cinema control protocol on **TCP port 43728** —
@@ -62,7 +66,8 @@ data:
 
 ## Installation
 
-1. HACS → Custom repositories → add this repository, category **Integration**.
+1. Use the **Open in HACS** button above, or add this repository by hand:
+   HACS → Custom repositories → paste the repository URL, category **Integration**.
 2. Install, restart Home Assistant.
 3. Settings → Devices & services → Add integration → **Sharp NEC Cinema Projector**.
 4. Enter the IP address of the projector head. Port 43728 and projector ID 0 (broadcast) suit

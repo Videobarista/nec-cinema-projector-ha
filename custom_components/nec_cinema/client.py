@@ -117,7 +117,9 @@ class NecClient:
                 if response.is_nak:
                     raise NecNakError(response.error_text, response.error_code)
                 return response
-            _LOGGER.debug("discarding unexpected frame id1=%02X id2=%02X", response.id1, response.id2)
+            _LOGGER.debug(
+                "discarding unexpected frame id1=%02X id2=%02X", response.id1, response.id2
+            )
         raise NecError("no matching response")
 
     async def _read_frame(self, reader: asyncio.StreamReader) -> Response:
