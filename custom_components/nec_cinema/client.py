@@ -85,11 +85,22 @@ class NecClient:
         except (TimeoutError, OSError) as err:
             raise NecError(f"cannot connect to {self._host}:{self._port}: {err}") from err
 
-    async def request(self, id1: int, id2: int, data: bytes = b"") -> Response:
-        """Send a command and return the matching response."""
+    async def request(
+        self,
+        id1: int,
+        id2: int,
+        data: bytes = b"",
+        accept_id2: tuple[int, ...] | None = None,
+    ) -> Response:
+        """Send a command and return the matching response.
+
+        ``accept_id2`` covers the commands that answer under a different ID2
+        than they were sent with; LAMP MODE SET is sent as B0H and answered as
+        B1H.
+        """
         async with self._lock:
             try:
-                return await self._request(id1, id2, data)
+                return await self._request(id1, id2, data, accept_id2)
             except NecNakError:
                 raise
             except NecError:
@@ -97,7 +108,13 @@ class NecClient:
                 await self.close()
                 raise
 
-    async def _request(self, id1: int, id2: int, data: bytes) -> Response:
+    async def _request(
+        self,
+        id1: int,
+        id2: int,
+        data: bytes,
+        accept_id2: tuple[int, ...] | None = None,
+    ) -> Response:
         await self._connect()
         reader, writer = self._reader, self._writer
         if reader is None or writer is None:
@@ -111,9 +128,10 @@ class NecClient:
             raise NecError(f"send failed: {err}") from err
 
         # Skip any stale frame that does not belong to this request.
+        expected = accept_id2 or (id2 & 0xFF,)
         for _ in range(4):
             response = await self._read_frame(reader)
-            if response.id2 == (id2 & 0xFF) and (response.id1 & ACK_BIT):
+            if response.id2 in expected and (response.id1 & ACK_BIT):
                 if response.is_nak:
                     raise NecNakError(response.error_text, response.error_code)
                 return response
@@ -373,6 +391,28 @@ class NecProjector:
             "ampere": float(u16le(data, 3)),
             "volt": round(u16le(data, 5) / 10, 1),
         }
+
+    async def lamp_mode(self) -> int:
+        """LAMP MODE REQUEST (097-246.): dual, lamp 1 only or lamp 2 only."""
+        data = (await self.client.request(0x03, 0xB0, bytes((0xD8,)))).data
+        if len(data) < 2:
+            raise NecError("short lamp mode response")
+        return data[1]
+
+    async def set_lamp_mode(self, mode: int) -> None:
+        """LAMP MODE SET (098-246.).
+
+        The command goes out as B0H and the projector answers as B1H, so both
+        are accepted.
+        """
+        response = await self.client.request(
+            0x03, 0xB0, bytes((0xD8, mode)), accept_id2=(0xB0, 0xB1)
+        )
+        result = response.data[1] if len(response.data) >= 2 else 0x00
+        if result == 0x02:
+            raise NecNakError("the projector cannot change the lamp mode right now", None)
+        if result != 0x00:
+            raise NecNakError("the projector could not change the lamp mode", None)
 
     async def light_mode(self) -> int:
         """LAMP CONTROL MODE REQUEST (235-18.)."""

@@ -37,9 +37,11 @@ async def async_setup_entry(
 ) -> None:
     """Set up the lens buttons."""
     coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
+    entities: list[ButtonEntity] = [
         NecLensButton(coordinator, key, axis, value) for key, axis, value in LENS_BUTTONS
-    )
+    ]
+    entities.append(NecForgetMacrosButton(coordinator))
+    async_add_entities(entities)
 
 
 class NecLensButton(NecCinemaEntity, ButtonEntity):
@@ -62,3 +64,18 @@ class NecLensButton(NecCinemaEntity, ButtonEntity):
     async def async_press(self) -> None:
         """Drive the lens motor briefly."""
         await self.async_run_command("lens_control", self._axis, self._value)
+
+
+class NecForgetMacrosButton(NecCinemaEntity, ButtonEntity):
+    """Drop the preset key names learned so far."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the button."""
+        super().__init__(coordinator, "forget_macros")
+
+    async def async_press(self) -> None:
+        """Clear the learned names so they are picked up again."""
+        await self.coordinator.async_forget_macros()

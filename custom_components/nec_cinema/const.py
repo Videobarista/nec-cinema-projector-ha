@@ -83,6 +83,16 @@ MODEL_VARIANTS: Final = {
 # models leave those bytes as "don't care".
 LAMP_DETAIL_TYPES: Final = frozenset({(0x0C, 0x0C, 0x0A), (0x0C, 0x0C, 0x0F)})
 
+# --- Lamp mode (LAMP MODE REQUEST/SET 097-246, 098-246) -------------------
+# Dual lamp heads only: NC900C-A, NC1000C, NC1001C+, NC1005C.
+LAMP_MODES: Final = {
+    0x00: "dual",
+    0x01: "lamp1",
+    0x02: "lamp2",
+}
+LAMP_MODE_CODES: Final = {name: code for code, name in LAMP_MODES.items()}
+LAMP_MODE_UNKNOWN: Final = "unknown_lamp_mode"
+
 # --- Light control mode (LAMP CONTROL MODE REQUEST/SET 235-18, 235-19) ----
 LIGHT_MODES: Final = {
     0x00: "standard",

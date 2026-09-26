@@ -24,7 +24,7 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "Macros are written as a comma separated list, for example: 1: Flat, 2: Scope, 3: Alternative content. Only the macros you list here appear in the macro select.",
+        "description": "Macro names are learned automatically: whenever a different title becomes active, its name and preset key are recorded. Use this field only to override or pre-fill them, written as a comma separated list, for example: 1: Flat, 2: Scope.",
         "data": {
           "scan_interval": "Polling interval (seconds)",
           "macros": "Preset (macro) keys"
@@ -76,6 +76,14 @@
           "standard": "Follow projector power",
           "on": "Forced on",
           "off": "Forced off"
+        }
+      },
+      "lamp_mode": {
+        "name": "Lamp mode",
+        "state": {
+          "dual": "Both lamps",
+          "lamp1": "Lamp 1 only",
+          "lamp2": "Lamp 2 only"
         }
       }
     },
@@ -161,6 +169,9 @@
       },
       "lens_shift_v_minus": {
         "name": "Lens shift V minus"
+      },
+      "forget_macros": {
+        "name": "Forget learned macros"
       }
     }
   },

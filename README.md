@@ -25,14 +25,16 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Projector | `media_player` | On/off, input port selection, current title |
 | Light source | `switch` | Light the lamp or laser without cycling projector power |
 | Light control mode | `select` | Follow power, forced on, or forced off |
+| Lamp mode | `select` | Both lamps, lamp 1 only or lamp 2 only, on dual lamp heads |
 | Douser | `cover` (shutter) | Open and close the mechanical douser |
 | Douser open | `switch` | The same douser as a plain switch (disabled by default) |
 | Picture mute | `switch` | Electronic blanking, douser stays put |
-| Macro | `select` | Preset (macro) keys you named in the options |
+| Macro | `select` | Preset (macro) keys, by the names the projector gave them |
 | Lens | `button` | Zoom, focus and lens shift, a quarter second per press |
 | Status | `sensor` | Standby, ignition, running, cooling, light error, … |
 | Light source hours | `sensor` | Lamp or laser usage time, with the warning threshold as an attribute |
 | Lamp remaining | `sensor` | Remaining lamp life in percent, where the head reports it |
+| Lamp 2 hours / remaining | `sensor` | The same for the second lamp, on dual lamp heads |
 | Lamp strikes | `sensor` | How often the lamp has been struck |
 | Light output | `sensor` | Configured output power in percent (newer heads) |
 | Lamp power / current / voltage | `sensor` | Measured by the lamp power supply (NC3240S-A, NC3200S, NC2000C, NC1200C) |
@@ -76,13 +78,25 @@ data:
 4. Enter the IP address of the projector head. Port 43728 and projector ID 0 (broadcast) suit
    virtually every single projector installation.
 
-In the integration options you can set the polling interval and name your macro keys, for example:
+In the integration options you can set the polling interval and, if you want, pre-fill or override
+macro names — see below.
 
-```
-1: Flat, 2: Scope, 3: Alternative content
-```
+## Macro names are learned, not configured
 
-Only the macros you list appear in the `select` entity. The service call works for all 20 regardless.
+The protocol can report which title is active, including its name and which preset key it belongs
+to, but it cannot list the titles or preset keys. Walking through them to find out would mean
+actually switching the projector through every format, which is not something to do on a cinema
+head.
+
+So the names are learned instead. Whenever a different title becomes active — through this
+integration, the touch panel, or a theatre management system — the name and its preset number are
+recorded. After a pass through the preset keys, the **Macro** select holds them all and switching by
+name works from scripts and automations.
+
+The list starts empty, and a preset key that is never used never appears. To pre-fill or override
+a name, set it in the integration options as a comma separated list, for example
+`1: Flat, 2: Scope`; names written there win over learned ones. The **Forget learned macros**
+button, disabled by default, clears what was learned after you reorganise the preset keys.
 
 ## Lens control
 

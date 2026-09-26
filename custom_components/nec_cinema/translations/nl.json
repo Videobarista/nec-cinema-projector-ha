@@ -24,7 +24,7 @@
     "step": {
       "init": {
         "title": "Opties",
-        "description": "Macro's schrijf je als kommagescheiden lijst, bijvoorbeeld: 1: Flat, 2: Scope, 3: Alternatieve content. Alleen de macro's die je hier noemt verschijnen in de macro-keuzelijst.",
+        "description": "Macronamen worden vanzelf geleerd: zodra een andere titel actief wordt, worden de naam en de presettoets onthouden. Gebruik dit veld alleen om ze te overschrijven of vooraf in te vullen, als kommagescheiden lijst, bijvoorbeeld: 1: Flat, 2: Scope.",
         "data": {
           "scan_interval": "Pollinterval (seconden)",
           "macros": "Preset- (macro)toetsen"
@@ -76,6 +76,14 @@
           "standard": "Volgt projector aan/uit",
           "on": "Geforceerd aan",
           "off": "Geforceerd uit"
+        }
+      },
+      "lamp_mode": {
+        "name": "Lampmodus",
+        "state": {
+          "dual": "Beide lampen",
+          "lamp1": "Alleen lamp 1",
+          "lamp2": "Alleen lamp 2"
         }
       }
     },
@@ -161,6 +169,9 @@
       },
       "lens_shift_v_minus": {
         "name": "Lensshift V min"
+      },
+      "forget_macros": {
+        "name": "Geleerde macro's wissen"
       }
     }
   },

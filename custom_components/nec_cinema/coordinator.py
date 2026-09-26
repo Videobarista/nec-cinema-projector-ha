@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
@@ -24,6 +25,8 @@ from .const import (
     DOMAIN,
     INPUT_STATUS_PORTS,
     LAMP_DETAIL_TYPES,
+    LAMP_MODE_UNKNOWN,
+    LAMP_MODES,
     LEGACY_LAMP_OUTPUT_TYPES,
     LEGACY_LAMP_TYPES,
     LEGACY_TEMP_NAMES,
@@ -42,6 +45,9 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 MAX_ERROR_STRINGS = 6
+
+STORAGE_VERSION = 1
+SAVE_DELAY = 10
 
 
 @dataclass
@@ -81,6 +87,7 @@ class ProjectorData:
     lamp2_strikes: int | None = None
     light_power: float | None = None
     light_mode: str = LIGHT_MODE_UNKNOWN
+    lamp_mode: str = LAMP_MODE_UNKNOWN
     lamp_watt: float | None = None
     lamp_ampere: float | None = None
     lamp_volt: float | None = None
@@ -118,6 +125,9 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self.lamp_output_kind: str | None = None
         self.lamp_details = False
         self.has_lamp2 = False
+        self.has_lamp_mode = False
+        self._store: Store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.macros")
+        self._learned: dict[int, str] = {}
         self._poll_count = 0
         self._first_poll_done = False
 
@@ -125,6 +135,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
 
     async def async_probe(self) -> None:
         """Read the static information once, at config entry setup."""
+        await self._load_learned()
         reported = await self.projector.model_name()
 
         try:
@@ -141,6 +152,12 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
 
         self._legacy_lamp = self.projector_type in LEGACY_LAMP_TYPES
         self.lamp_details = self.projector_type in LAMP_DETAIL_TYPES
+        try:
+            await self.projector.lamp_mode()
+        except (NecError, NecNakError) as err:
+            _LOGGER.debug("no lamp mode support: %s", err)
+        else:
+            self.has_lamp_mode = True
         if self.lamp_details:
             try:
                 self.has_lamp2 = bool((await self.projector.lamp_info_modern()).get("lamp2_hours"))
@@ -149,6 +166,41 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         await self._probe_lamp_output()
         await self._probe_sources()
         await self._probe_thermal_sensors()
+
+    async def _load_learned(self) -> None:
+        """Read the macro names learned in earlier sessions."""
+        stored = await self._store.async_load()
+        if isinstance(stored, dict):
+            self._learned = {
+                int(key): str(value)
+                for key, value in stored.get("macros", {}).items()
+                if str(key).isdigit()
+            }
+
+    @property
+    def learned_macros(self) -> dict[int, str]:
+        """Return the preset key names seen so far."""
+        return dict(self._learned)
+
+    def _learn_macro(self, data: ProjectorData) -> None:
+        """Remember which name belongs to the preset key now active.
+
+        The protocol cannot list the titles or preset keys, only report the one
+        currently selected. Recording each one as it passes builds the list
+        without ever switching the projector to find out.
+        """
+        number, name = data.preset_number, data.title_name
+        if not number or not name or self._learned.get(number) == name:
+            return
+        self._learned[number] = name
+        _LOGGER.debug("learned preset %s = %s", number, name)
+        self._store.async_delay_save(lambda: {"macros": self._learned}, SAVE_DELAY)
+
+    async def async_forget_macros(self) -> None:
+        """Drop every learned preset name."""
+        self._learned = {}
+        await self._store.async_save({"macros": {}})
+        self.async_update_listeners()
 
     def _resolve_model(self, reported: str) -> str:
         """Return the most specific model name available.
@@ -253,6 +305,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             return data
 
         self._first_poll_done = True
+        self._learn_macro(data)
         data.available = True
         data.last_seen = dt_util.utcnow()
 
@@ -272,6 +325,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             data.lamp2_strikes = previous.lamp2_strikes
             data.light_power = previous.light_power
             data.light_mode = previous.light_mode
+            data.lamp_mode = previous.lamp_mode
             data.temperatures = previous.temperatures
         return data
 
@@ -343,6 +397,14 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 data.light_power = await self.projector.light_power()
         except (NecError, NecNakError) as err:
             _LOGGER.debug("lamp parameter failed: %s", err)
+
+        if self.has_lamp_mode:
+            try:
+                data.lamp_mode = LAMP_MODES.get(
+                    await self.projector.lamp_mode(), LAMP_MODE_UNKNOWN
+                )
+            except (NecError, NecNakError) as err:
+                _LOGGER.debug("lamp mode failed: %s", err)
 
         try:
             data.light_mode = LIGHT_MODES.get(
