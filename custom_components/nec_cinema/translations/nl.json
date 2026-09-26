@@ -124,6 +124,32 @@
       "lamp_volt": {
         "name": "Lampspanning"
       }
+    },
+    "button": {
+      "lens_zoom_plus": {
+        "name": "Zoom +"
+      },
+      "lens_zoom_minus": {
+        "name": "Zoom −"
+      },
+      "lens_focus_plus": {
+        "name": "Focus +"
+      },
+      "lens_focus_minus": {
+        "name": "Focus −"
+      },
+      "lens_shift_h_plus": {
+        "name": "Lensshift H +"
+      },
+      "lens_shift_h_minus": {
+        "name": "Lensshift H −"
+      },
+      "lens_shift_v_plus": {
+        "name": "Lensshift V +"
+      },
+      "lens_shift_v_minus": {
+        "name": "Lensshift V −"
+      }
     }
   },
   "services": {

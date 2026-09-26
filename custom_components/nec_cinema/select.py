@@ -9,13 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import (
-    CONF_MACROS,
-    DOMAIN,
-    LIGHT_MODE_CODES,
-    LIGHT_MODE_UNKNOWN,
-    LIGHT_MODES,
-)
+from .const import CONF_MACROS, DOMAIN, LIGHT_MODE_CODES, LIGHT_MODE_UNKNOWN, LIGHT_MODES
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
 

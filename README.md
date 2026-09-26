@@ -29,6 +29,7 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Douser open | `switch` | The same douser as a plain switch (disabled by default) |
 | Picture mute | `switch` | Electronic blanking, douser stays put |
 | Macro | `select` | Preset (macro) keys you named in the options |
+| Lens | `button` | Zoom, focus and lens shift, a quarter second per press |
 | Status | `sensor` | Standby, ignition, running, cooling, light error, … |
 | Light source hours | `sensor` | Lamp or laser usage time |
 | Light output | `sensor` | Configured output power in percent (newer heads) |
@@ -54,7 +55,7 @@ All actions target the media player entity.
 - `nec_cinema.select_title` — pick an entry from the title list (0–99)
 - `nec_cinema.select_macro` — press a preset key (1–20)
 - `nec_cinema.picture_mute` — electronic blanking on or off
-- `nec_cinema.lens_control` — nudge zoom, focus or lens shift
+- `nec_cinema.lens_control` — nudge zoom, focus or lens shift for a chosen duration
 
 ```yaml
 action: nec_cinema.select_macro
@@ -80,6 +81,17 @@ In the integration options you can set the polling interval and name your macro 
 ```
 
 Only the macros you list appear in the `select` entity. The service call works for all 20 regardless.
+
+## Lens control
+
+Zoom, focus and both lens shift axes are available as buttons, each press
+driving the motor for a quarter of a second. Which physical direction counts as
+plus depends on the lens, so try one press and watch the screen.
+
+There is no position feedback: the protocol offers no way to read a lens
+position back, and no lens memories. For longer runs use the
+`nec_cinema.lens_control` action, which takes a duration of 0.25, 0.5 or 1
+second.
 
 ## Switching the light
 

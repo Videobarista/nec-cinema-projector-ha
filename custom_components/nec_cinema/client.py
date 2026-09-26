@@ -70,7 +70,7 @@ class NecClient:
         try:
             writer.close()
             await writer.wait_closed()
-        except (OSError, asyncio.TimeoutError) as err:
+        except (TimeoutError, OSError) as err:
             _LOGGER.debug("error while closing the connection: %s", err)
 
     async def _connect(self) -> None:
@@ -82,7 +82,7 @@ class NecClient:
             self._reader, self._writer = await asyncio.wait_for(
                 asyncio.open_connection(self._host, self._port), self._timeout
             )
-        except (OSError, asyncio.TimeoutError) as err:
+        except (TimeoutError, OSError) as err:
             raise NecError(f"cannot connect to {self._host}:{self._port}: {err}") from err
 
     async def request(self, id1: int, id2: int, data: bytes = b"") -> Response:
@@ -107,7 +107,7 @@ class NecClient:
         try:
             writer.write(frame)
             await writer.drain()
-        except (OSError, asyncio.TimeoutError) as err:
+        except (TimeoutError, OSError) as err:
             raise NecError(f"send failed: {err}") from err
 
         # Skip any stale frame that does not belong to this request.
@@ -130,7 +130,7 @@ class NecClient:
             )
         except asyncio.IncompleteReadError as err:
             raise NecError("connection closed by projector") from err
-        except (OSError, asyncio.TimeoutError) as err:
+        except (TimeoutError, OSError) as err:
             raise NecError(f"no response: {err}") from err
         _LOGGER.debug("<- %s", (header + tail).hex(" "))
         try:

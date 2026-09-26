@@ -124,6 +124,32 @@
       "lamp_volt": {
         "name": "Lamp voltage"
       }
+    },
+    "button": {
+      "lens_zoom_plus": {
+        "name": "Zoom +"
+      },
+      "lens_zoom_minus": {
+        "name": "Zoom −"
+      },
+      "lens_focus_plus": {
+        "name": "Focus +"
+      },
+      "lens_focus_minus": {
+        "name": "Focus −"
+      },
+      "lens_shift_h_plus": {
+        "name": "Lens shift H +"
+      },
+      "lens_shift_h_minus": {
+        "name": "Lens shift H −"
+      },
+      "lens_shift_v_plus": {
+        "name": "Lens shift V +"
+      },
+      "lens_shift_v_minus": {
+        "name": "Lens shift V −"
+      }
     }
   },
   "services": {
