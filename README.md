@@ -31,7 +31,9 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Macro | `select` | Preset (macro) keys you named in the options |
 | Lens | `button` | Zoom, focus and lens shift, a quarter second per press |
 | Status | `sensor` | Standby, ignition, running, cooling, light error, … |
-| Light source hours | `sensor` | Lamp or laser usage time |
+| Light source hours | `sensor` | Lamp or laser usage time, with the warning threshold as an attribute |
+| Lamp remaining | `sensor` | Remaining lamp life in percent, where the head reports it |
+| Lamp strikes | `sensor` | How often the lamp has been struck |
 | Light output | `sensor` | Configured output power in percent (newer heads) |
 | Lamp power / current / voltage | `sensor` | Measured by the lamp power supply (NC3240S-A, NC3200S, NC2000C, NC1200C) |
 | Cooling remaining | `sensor` | Seconds of cooling left |

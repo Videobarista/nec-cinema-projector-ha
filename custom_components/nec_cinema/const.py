@@ -79,6 +79,10 @@ MODEL_VARIANTS: Final = {
 }
 
 
+# Heads that fill in the remaining-life and lamp 2 fields of 235-31. Other
+# models leave those bytes as "don't care".
+LAMP_DETAIL_TYPES: Final = frozenset({(0x0C, 0x0C, 0x0A), (0x0C, 0x0C, 0x0F)})
+
 # --- Light control mode (LAMP CONTROL MODE REQUEST/SET 235-18, 235-19) ----
 LIGHT_MODES: Final = {
     0x00: "standard",

@@ -25,6 +25,7 @@ from .const import (
     INPUT_STATUS_PORTS,
     LEGACY_LAMP_OUTPUT_TYPES,
     LEGACY_LAMP_TYPES,
+    LAMP_DETAIL_TYPES,
     LEGACY_TEMP_NAMES,
     LIGHT_MODE_UNKNOWN,
     MODEL_TYPES,
@@ -72,6 +73,12 @@ class ProjectorData:
 
     errors: list[str] = field(default_factory=list)
     light_hours: float | None = None
+    light_warning_hours: int | None = None
+    light_remaining: int | None = None
+    light_strikes: int | None = None
+    lamp2_hours: int | None = None
+    lamp2_remaining: int | None = None
+    lamp2_strikes: int | None = None
     light_power: float | None = None
     light_mode: str = LIGHT_MODE_UNKNOWN
     lamp_watt: float | None = None
@@ -109,6 +116,8 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._legacy_lamp = False
         self._legacy_temps = False
         self.lamp_output_kind: str | None = None
+        self.lamp_details = False
+        self.has_lamp2 = False
         self._poll_count = 0
         self._first_poll_done = False
 
@@ -131,6 +140,12 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self.model = self._resolve_model(reported)
 
         self._legacy_lamp = self.projector_type in LEGACY_LAMP_TYPES
+        self.lamp_details = self.projector_type in LAMP_DETAIL_TYPES
+        if self.lamp_details:
+            try:
+                self.has_lamp2 = bool((await self.projector.lamp_info_modern()).get("lamp2_hours"))
+            except (NecError, NecNakError) as err:
+                _LOGGER.debug("lamp detail probe failed: %s", err)
         await self._probe_lamp_output()
         await self._probe_sources()
         await self._probe_thermal_sensors()
@@ -213,6 +228,11 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             self._legacy_temps = True
 
     @property
+    def light_hours_detailed(self) -> bool:
+        """Whether this head answers the detailed lamp information command."""
+        return not self._legacy_lamp
+
+    @property
     def device_identifier(self) -> str:
         """Stable identifier for the device registry."""
         return self.serial or f"{self.entry.data[CONF_HOST]}:{self.entry.data.get(CONF_PORT)}"
@@ -244,6 +264,12 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         elif previous is not None:
             data.errors = previous.errors
             data.light_hours = previous.light_hours
+            data.light_warning_hours = previous.light_warning_hours
+            data.light_remaining = previous.light_remaining
+            data.light_strikes = previous.light_strikes
+            data.lamp2_hours = previous.lamp2_hours
+            data.lamp2_remaining = previous.lamp2_remaining
+            data.lamp2_strikes = previous.lamp2_strikes
             data.light_power = previous.light_power
             data.light_mode = previous.light_mode
             data.temperatures = previous.temperatures
@@ -297,7 +323,15 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             if self._legacy_lamp:
                 data.light_hours = await self.projector.light_hours_legacy()
             else:
-                data.light_hours = await self.projector.light_hours_modern()
+                info = await self.projector.lamp_info_modern()
+                data.light_hours = info["hours"]
+                data.light_warning_hours = info.get("warning_hours")
+                data.light_strikes = info.get("strikes")
+                if self.lamp_details:
+                    data.light_remaining = info.get("remaining")
+                    data.lamp2_hours = info.get("lamp2_hours")
+                    data.lamp2_remaining = info.get("lamp2_remaining")
+                    data.lamp2_strikes = info.get("lamp2_strikes")
         except NecNakError:
             # Wrong command family for this model; switch over and retry next time.
             self._legacy_lamp = not self._legacy_lamp
@@ -390,4 +424,4 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 await asyncio.sleep(COMMAND_RETRY_DELAY)
             else:
                 break
-        await self.async_request_refresh()
+        await self.async_refresh()

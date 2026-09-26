@@ -123,32 +123,44 @@
       },
       "lamp_volt": {
         "name": "Lampspanning"
+      },
+      "lamp_remaining": {
+        "name": "Lamp resterend"
+      },
+      "lamp_strikes": {
+        "name": "Lampontstekingen"
+      },
+      "lamp2_hours": {
+        "name": "Lamp 2 branduren"
+      },
+      "lamp2_remaining": {
+        "name": "Lamp 2 resterend"
       }
     },
     "button": {
       "lens_zoom_plus": {
-        "name": "Zoom +"
+        "name": "Zoom plus"
       },
       "lens_zoom_minus": {
-        "name": "Zoom −"
+        "name": "Zoom min"
       },
       "lens_focus_plus": {
-        "name": "Focus +"
+        "name": "Focus plus"
       },
       "lens_focus_minus": {
-        "name": "Focus −"
+        "name": "Focus min"
       },
       "lens_shift_h_plus": {
-        "name": "Lensshift H +"
+        "name": "Lensshift H plus"
       },
       "lens_shift_h_minus": {
-        "name": "Lensshift H −"
+        "name": "Lensshift H min"
       },
       "lens_shift_v_plus": {
-        "name": "Lensshift V +"
+        "name": "Lensshift V plus"
       },
       "lens_shift_v_minus": {
-        "name": "Lensshift V −"
+        "name": "Lensshift V min"
       }
     }
   },

@@ -36,6 +36,12 @@ async def async_setup_entry(
         NecErrors(coordinator),
         NecLastSeen(coordinator),
     ]
+    if coordinator.light_hours_detailed:
+        entities.append(NecLampStrikes(coordinator))
+    if coordinator.lamp_details:
+        entities.append(NecLampRemaining(coordinator))
+    if coordinator.has_lamp2:
+        entities.extend([NecLamp2Hours(coordinator), NecLamp2Remaining(coordinator)])
     if coordinator.lamp_output_kind == "percent":
         entities.append(NecLightPower(coordinator))
     elif coordinator.lamp_output_kind == "watt":
@@ -85,6 +91,82 @@ class NecLightHours(NecCinemaEntity, SensorEntity):
     def native_value(self) -> float | None:
         """Return the usage time in hours."""
         return self.coordinator.data.light_hours
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int | None]:
+        """Return the hour count at which the projector starts warning."""
+        return {"warning_hours": self.coordinator.data.light_warning_hours}
+
+
+class NecLampRemaining(NecCinemaEntity, SensorEntity):
+    """Remaining lamp life as the projector calculates it."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "lamp_remaining")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the remaining life in percent."""
+        return self.coordinator.data.light_remaining
+
+
+class NecLampStrikes(NecCinemaEntity, SensorEntity):
+    """How often the lamp has been struck."""
+
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "lamp_strikes")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the strike count."""
+        return self.coordinator.data.light_strikes
+
+
+class NecLamp2Hours(NecCinemaEntity, SensorEntity):
+    """Usage time of the second lamp."""
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "lamp2_hours")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the usage time of lamp 2."""
+        return self.coordinator.data.lamp2_hours
+
+    @property
+    def extra_state_attributes(self) -> dict[str, int | None]:
+        """Return the strike count of lamp 2."""
+        return {"strikes": self.coordinator.data.lamp2_strikes}
+
+
+class NecLamp2Remaining(NecCinemaEntity, SensorEntity):
+    """Remaining life of the second lamp."""
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "lamp2_remaining")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the remaining life of lamp 2 in percent."""
+        return self.coordinator.data.lamp2_remaining
 
 
 class NecLightPower(NecCinemaEntity, SensorEntity):

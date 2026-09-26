@@ -315,12 +315,30 @@ class NecProjector:
             return f"Error {code}"
         return cstring(data, 4, data[3]) or f"Error {code}"
 
-    async def light_hours_modern(self) -> int:
-        """LAMP INFORMATION REQUEST 3 (235-31.), light usage time in hours."""
+    async def lamp_info_modern(self) -> dict[str, int]:
+        """LAMP INFORMATION REQUEST 3 (235-31.).
+
+        Usage time, the hour count at which the projector warns, the strike
+        count and, on the NC900C-A and NC1000C families, the remaining life in
+        percent. The lamp 2 fields are only meaningful on those same families.
+        """
         data = (await self.client.request(0x03, 0x2F, bytes((0x1E,)))).data
         if len(data) < 3:
             raise NecError("short lamp information response")
-        return u16le(data, 1)
+        info = {"hours": u16le(data, 1)}
+        if len(data) >= 15:
+            info.update(
+                {
+                    "warning_hours": u16le(data, 3),
+                    "remaining": data[5],
+                    "strikes": u16le(data, 6),
+                    "lamp2_hours": u16le(data, 8),
+                    "lamp2_warning_hours": u16le(data, 10),
+                    "lamp2_remaining": data[12],
+                    "lamp2_strikes": u16le(data, 13),
+                }
+            )
+        return info
 
     async def light_hours_legacy(self) -> float:
         """LAMP INFORMATION REQUEST 2 (037-2.), usage time in seconds."""

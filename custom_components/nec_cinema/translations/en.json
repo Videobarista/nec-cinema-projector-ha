@@ -123,32 +123,44 @@
       },
       "lamp_volt": {
         "name": "Lamp voltage"
+      },
+      "lamp_remaining": {
+        "name": "Lamp remaining"
+      },
+      "lamp_strikes": {
+        "name": "Lamp strikes"
+      },
+      "lamp2_hours": {
+        "name": "Lamp 2 hours"
+      },
+      "lamp2_remaining": {
+        "name": "Lamp 2 remaining"
       }
     },
     "button": {
       "lens_zoom_plus": {
-        "name": "Zoom +"
+        "name": "Zoom plus"
       },
       "lens_zoom_minus": {
-        "name": "Zoom −"
+        "name": "Zoom minus"
       },
       "lens_focus_plus": {
-        "name": "Focus +"
+        "name": "Focus plus"
       },
       "lens_focus_minus": {
-        "name": "Focus −"
+        "name": "Focus minus"
       },
       "lens_shift_h_plus": {
-        "name": "Lens shift H +"
+        "name": "Lens shift H plus"
       },
       "lens_shift_h_minus": {
-        "name": "Lens shift H −"
+        "name": "Lens shift H minus"
       },
       "lens_shift_v_plus": {
-        "name": "Lens shift V +"
+        "name": "Lens shift V plus"
       },
       "lens_shift_v_minus": {
-        "name": "Lens shift V −"
+        "name": "Lens shift V minus"
       }
     }
   },
