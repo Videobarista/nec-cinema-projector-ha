@@ -33,6 +33,52 @@ PROCESS_STATUS: Final = {
 }
 PROCESS_STATUS_UNKNOWN: Final = "unknown_state"
 
+# --- Model names (SETTING REQUEST 078-1, DATA01-03 and DATA17) -------------
+# Several heads answer MODEL NAME REQUEST with something unhelpful such as
+# "NC-Series", while the projector type is specific. Prefer the type.
+MODEL_TYPES: Final = {
+    (0x0B, 0x00, 0x0A): "MM3000B",
+    (0x0C, 0x05, 0x0A): "NC3200S",
+    (0x0C, 0x07, 0x0A): "NC1200C",
+    (0x0C, 0x08, 0x0A): "NC2000C",
+    (0x0C, 0x0A, 0x0A): "NC3240S-A",
+    (0x0C, 0x0B, 0x0A): "NC1040L-A series",
+    (0x0C, 0x0C, 0x0A): "NC900C-A",
+    (0x0C, 0x0F, 0x0A): "NC1100L-A",
+    (0x0C, 0x0C, 0x0F): "NC1000C series",
+    (0x0C, 0x0F, 0x0F): "NC1700L",
+    (0x0C, 0x20, 0x0F): "NC1201L-A series",
+    (0x0C, 0x21, 0x11): "NC3541L series",
+    (0x0C, 0x23, 0x13): "NP-02HD series",
+    (0x0C, 0x23, 0x15): "NP-42HD series",
+    (0x0C, 0x24, 0x13): "NC1402L series",
+}
+
+# DATA17 narrows a series down to the exact model.
+MODEL_VARIANTS: Final = {
+    (0x0C, 0x0B, 0x0A): {0x02: "NC1040L-A", 0x03: "NC1440L-A"},
+    (0x0C, 0x0C, 0x0F): {0x00: "NC1000C", 0x01: "NC1001C+", 0x02: "NC1005C"},
+    (0x0C, 0x0F, 0x0F): {0x00: "NC1700L"},
+    (0x0C, 0x20, 0x0F): {
+        0x00: "NC1201L-A",
+        0x01: "NC1205L-A+",
+        0x02: "NC1101L-A",
+        0x03: "NC1201L1-A",
+    },
+    (0x0C, 0x21, 0x11): {0x00: "NC3541L", 0x01: "NC2001L+", 0x02: "NC2041L"},
+    (0x0C, 0x23, 0x13): {
+        0x00: "NP-02HD",
+        0x01: "NC2402ML",
+        0x02: "NC2002ML",
+        0x03: "NC1802ML",
+        0x04: "NC2403ML",
+        0x06: "NC1803ML",
+    },
+    (0x0C, 0x23, 0x15): {0x00: "NP-42HD", 0x01: "NC2443ML", 0x03: "NC1843ML"},
+    (0x0C, 0x24, 0x13): {0x00: "NC1402L", 0x01: "NC1202L"},
+}
+
+
 # --- Light control mode (LAMP CONTROL MODE REQUEST/SET 235-18, 235-19) ----
 LIGHT_MODES: Final = {
     0x00: "standard",

@@ -121,7 +121,7 @@ lens, port), open the douser, then start playback on the media block.
 
 ## Tested against
 
-Verified on an **NC1200C** in daily use: power, douser, light control, input selection, titles,
+Verified on an **NC1200C** and an **NC900C-A**: power, douser, light control, input selection, titles,
 errors and temperatures all confirmed against the head itself.
 
 Written against rev. 15.0 of the protocol document, which covers NC900C-A through NC2443ML,
@@ -131,6 +131,8 @@ document, so the right ones are used without guessing:
 - lamp hours: `LAMP INFORMATION REQUEST 3` (235-31), falling back to `2` (037-2) on older heads;
 - lamp output: measured watts, amps and volts via `235-1` on the four heads that support it, a
   setting percentage via `235-29` on all others;
+- model name: taken from the projector type in `SETTING REQUEST` (078-1), since several heads
+  answer the model name request with a family label such as "NC-Series";
 - temperatures: `PARTS COUNT` / `COMMON CURRENT STATUS` (305-1, 300-20) on newer heads, falling back
   to `TEMPERATURE STATUS REQUEST 3` (078-204) on older ones.
 

@@ -24,6 +24,8 @@ async def async_get_config_entry_diagnostics(
         "options": dict(entry.options),
         "model": coordinator.model,
         "projector_type": coordinator.projector_type,
+        "model_subtype": coordinator.model_subtype,
+        "lamp_output_kind": coordinator.lamp_output_kind,
         "sources": coordinator.source_map,
         "thermal_sensors": coordinator.thermal_names,
         "state": data,

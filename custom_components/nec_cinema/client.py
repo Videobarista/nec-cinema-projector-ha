@@ -206,13 +206,18 @@ class NecProjector:
         response = await self.client.request(0x00, 0x86, bytes((0x08,)))
         return cstring(response.data, 1)
 
-    async def projector_type(self) -> tuple[int, int, int]:
-        """SETTING REQUEST (078-1.), DATA01-03."""
+    async def projector_info(self) -> tuple[tuple[int, int, int], int | None]:
+        """SETTING REQUEST (078-1.): the projector type and its sub type.
+
+        DATA01-03 identify a model or a family of models; DATA17 narrows a
+        family down to the exact model.
+        """
         response = await self.client.request(0x00, 0x85, bytes((0x00,)))
         data = response.data
         if len(data) < 3:
             raise NecError("short setting response")
-        return (data[0], data[1], data[2])
+        subtype = data[16] if len(data) > 16 else None
+        return (data[0], data[1], data[2]), subtype
 
     async def available_ports(self) -> list[int]:
         """INPUT TERMINAL REQUEST (068.)."""

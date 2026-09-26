@@ -27,6 +27,8 @@ from .const import (
     LEGACY_LAMP_TYPES,
     LEGACY_TEMP_NAMES,
     LIGHT_MODE_UNKNOWN,
+    MODEL_TYPES,
+    MODEL_VARIANTS,
     LIGHT_MODES,
     NC_PORT_CODES,
     PORT_NAMES,
@@ -101,6 +103,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self.model: str = "Cinema projector"
         self.serial: str | None = None
         self.projector_type: tuple[int, int, int] | None = None
+        self.model_subtype: int | None = None
         self.source_map: dict[str, int] = {}
         self.thermal_names: list[str] = []
         self._legacy_lamp = False
@@ -113,7 +116,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
 
     async def async_probe(self) -> None:
         """Read the static information once, at config entry setup."""
-        self.model = await self.projector.model_name() or self.model
+        reported = await self.projector.model_name()
 
         try:
             self.serial = await self.projector.serial_number()
@@ -121,14 +124,32 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             _LOGGER.debug("serial number unavailable: %s", err)
 
         try:
-            self.projector_type = await self.projector.projector_type()
+            self.projector_type, self.model_subtype = await self.projector.projector_info()
         except (NecError, NecNakError) as err:
             _LOGGER.debug("projector type unavailable: %s", err)
+
+        self.model = self._resolve_model(reported)
 
         self._legacy_lamp = self.projector_type in LEGACY_LAMP_TYPES
         await self._probe_lamp_output()
         await self._probe_sources()
         await self._probe_thermal_sensors()
+
+    def _resolve_model(self, reported: str) -> str:
+        """Return the most specific model name available.
+
+        Some heads answer MODEL NAME REQUEST with a family label such as
+        "NC-Series", so prefer the projector type from SETTING REQUEST and fall
+        back to whatever the head called itself.
+        """
+        if self.projector_type is not None:
+            variants = MODEL_VARIANTS.get(self.projector_type, {})
+            if self.model_subtype is not None and self.model_subtype in variants:
+                return variants[self.model_subtype]
+            known = MODEL_TYPES.get(self.projector_type)
+            if known:
+                return known
+        return reported or self.model
 
     async def _probe_lamp_output(self) -> None:
         """Find out which lamp output command this head answers.
