@@ -352,16 +352,16 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             except NecNakError as err:
                 _LOGGER.debug("lamp output refused: %s", err)
 
-        for coro, keys in (
-            (self.projector.mute_status(), ("douser_closed", "picture_mute")),
-            (self.projector.input_status(), ("port_key", "test_pattern", "switching")),
-            (
-                self.projector.current_title(),
-                ("title_number", "title_name", "preset_number"),
-            ),
+        # Pass the methods, not calls to them: a tuple of coroutines would
+        # create all three up front, and any that is never reached because an
+        # earlier one failed would be left un-awaited.
+        for query, keys in (
+            (self.projector.mute_status, ("douser_closed", "picture_mute")),
+            (self.projector.input_status, ("port_key", "test_pattern", "switching")),
+            (self.projector.current_title, ("title_number", "title_name", "preset_number")),
         ):
             try:
-                result: dict[str, Any] = await coro
+                result: dict[str, Any] = await query()
             except NecNakError as err:
                 _LOGGER.debug("status query refused: %s", err)
                 continue
