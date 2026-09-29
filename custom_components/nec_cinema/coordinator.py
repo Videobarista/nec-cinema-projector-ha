@@ -15,13 +15,14 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .client import NecClient, NecError, NecNakError, NecProjector
+from .client import NecClient, NecError, NecLockedError, NecNakError, NecProjector
 from .const import (
     COMMAND_ATTEMPTS,
     COMMAND_RETRY_DELAY,
     CONF_PROJECTOR_ID,
     DEFAULT_PORT_CODES,
     DEFAULT_SCAN_INTERVAL,
+    DEFERRABLE_ACTIONS,
     DOMAIN,
     INPUT_STATUS_PORTS,
     LAMP_DETAIL_TYPES,
@@ -35,9 +36,11 @@ from .const import (
     MODEL_TYPES,
     MODEL_VARIANTS,
     NC_PORT_CODES,
+    PENDING_TIMEOUT,
     PORT_NAMES,
     PROCESS_STATUS,
     PROCESS_STATUS_UNKNOWN,
+    SETTLED_STATUSES,
     SLOW_POLL_EVERY,
     TRANSIENT_NAK_CODES,
 )
@@ -128,6 +131,8 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self.has_lamp_mode = False
         self._store: Store = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.macros")
         self._learned: dict[int, str] = {}
+        self._pending: dict[str, tuple[str, tuple[Any, ...], float]] = {}
+        self.last_command: dict[str, Any] | None = None
         self._poll_count = 0
         self._first_poll_done = False
 
@@ -305,6 +310,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             return data
 
         self._first_poll_done = True
+        await self._apply_pending(data)
         self._learn_macro(data)
         data.available = True
         data.last_seen = dt_util.utcnow()
@@ -465,6 +471,60 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         except (NecError, NecNakError) as err:
             _LOGGER.debug("could not reset the light control mode: %s", err)
 
+    def _record(self, action: str, outcome: str, message: str) -> None:
+        """Remember how the last command went, for the diagnostic sensor."""
+        code = None
+        status = self.data.process_status if self.data else PROCESS_STATUS_UNKNOWN
+        self.last_command = {
+            "action": action,
+            "outcome": outcome,
+            "message": message,
+            "code": code,
+            "projector_status": status,
+            "at": dt_util.utcnow(),
+        }
+
+    def _record_error(self, action: str, outcome: str, err: Exception) -> None:
+        """Remember a failed command, including the projector's own wording."""
+        self._record(action, outcome, f"{action}: {err}")
+        if isinstance(err, NecNakError) and err.code:
+            self.last_command["code"] = f"{err.code[0]:02X}H {err.code[1]:02X}H"
+
+    @property
+    def settled(self) -> bool:
+        """Whether the projector is idle rather than starting, cooling or switching."""
+        return bool(self.data and self.data.process_status in SETTLED_STATUSES)
+
+    @property
+    def pending_actions(self) -> list[str]:
+        """Return the commands waiting for the projector to settle."""
+        return [held[0] for held in self._pending.values()]
+
+    async def _apply_pending(self, data: ProjectorData) -> None:
+        """Run commands that were refused while the projector was transitioning."""
+        if not self._pending or data.process_status not in SETTLED_STATUSES:
+            return
+        now = self.hass.loop.time()
+        for group, (action, args, queued_at) in list(self._pending.items()):
+            del self._pending[group]
+            if now - queued_at > PENDING_TIMEOUT:
+                _LOGGER.warning("giving up on held command %s: projector stayed busy", action)
+                continue
+            try:
+                await getattr(self.projector, action)(*args)
+            except (NecError, NecNakError) as err:
+                _LOGGER.warning("held command %s still refused: %s", action, err)
+                self._record_error(action, "refused", err)
+            else:
+                _LOGGER.info("held command %s applied now the projector is ready", action)
+                self._record(action, "ok", f"{action}: applied once the projector was ready")
+        try:
+            mute = await self.projector.mute_status()
+        except (NecError, NecNakError):
+            return
+        data.douser_closed = mute["douser_closed"]
+        data.picture_mute = mute["picture_mute"]
+
     async def async_send(self, action: str, *args: Any) -> None:
         """Run a projector command and refresh straight away.
 
@@ -478,12 +538,40 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 async with asyncio.timeout(20):
                     await method(*args)
             except NecNakError as err:
-                if err.code not in TRANSIENT_NAK_CODES or attempt == COMMAND_ATTEMPTS:
+                if err.code not in TRANSIENT_NAK_CODES:
+                    self._record_error(action, "refused", err)
+                    raise
+                # While the head is settled the same code means manual control
+                # is locked out, not that it is busy. Waiting will not help.
+                if self.settled:
+                    locked = NecLockedError(str(err), err.code)
+                    self._record_error(action, "locked", locked)
+                    raise locked from err
+                if attempt == COMMAND_ATTEMPTS:
+                    if action in DEFERRABLE_ACTIONS:
+                        self._pending[DEFERRABLE_ACTIONS[action]] = (
+                            action,
+                            args,
+                            self.hass.loop.time(),
+                        )
+                        _LOGGER.warning(
+                            "projector busy (%s); holding %s until it is ready",
+                            self.data.process_status if self.data else "unknown",
+                            action,
+                        )
+                        self._record_error(action, "held", err)
+                        return
+                    self._record_error(action, "busy", err)
                     raise
                 _LOGGER.debug(
                     "%s refused (%s), retry %s of %s", action, err, attempt, COMMAND_ATTEMPTS
                 )
                 await asyncio.sleep(COMMAND_RETRY_DELAY)
+            except NecError as err:
+                self._record_error(action, "failed", err)
+                raise
             else:
+                self._pending.pop(DEFERRABLE_ACTIONS.get(action, ""), None)
+                self._record(action, "ok", f"{action}: accepted")
                 break
         await self.async_refresh()

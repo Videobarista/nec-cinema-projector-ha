@@ -42,6 +42,7 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Current title | `sensor` | Title name, with title and preset number as attributes |
 | Active errors | `sensor` | Error count, with the decoded messages as an attribute |
 | Last seen | `sensor` | Timestamp of the last successful poll |
+| Last command | `sensor` | How the most recent command went, with the projector's own wording, the status it was in and the raw NAK code as attributes |
 | Temperatures | `sensor` | One per thermal sensor, discovered from the projector |
 | Light source | `binary_sensor` | Whether the lamp or laser is actually lit |
 | Projector error | `binary_sensor` | Problem class, with the messages as an attribute |
@@ -120,6 +121,27 @@ until the switch is turned back on or the **Light control mode** select is put
 back to *Follow projector power*. If a projector refuses to ignite, check that
 select first.
 
+## Seeing why a command was refused
+
+The **Last command** sensor holds the outcome of the most recent command, so a
+refusal does not have to be chased through the log. On a dashboard:
+
+```yaml
+type: markdown
+content: >
+  **{{ states('sensor.projector_last_command') }}**
+
+  {{ state_attr('sensor.projector_last_command', 'message') }}
+
+  Projector status: {{ state_attr('sensor.projector_last_command', 'projector_status') }}
+  {% if state_attr('sensor.projector_last_command', 'code') %}
+  Refusal code: {{ state_attr('sensor.projector_last_command', 'code') }}
+  {% endif %}
+  {% if state_attr('sensor.projector_last_command', 'pending') %}
+  Waiting to be applied: {{ state_attr('sensor.projector_last_command', 'pending') | join(', ') }}
+  {% endif %}
+```
+
 ## Media block (IMS / IMB)
 
 The projector protocol has **no playback commands**. Ports 43744–43759 belong to the media block
@@ -159,8 +181,12 @@ document, so the right ones are used without guessing:
 - The title list cannot be enumerated, only the current title is readable. Hence the macro naming
   in the options instead of a full list.
 - While the head is igniting, cooling or switching, it refuses commands with a NAK that clears by
-  itself. Those are retried for a few seconds; if the head is still busy, the action reports that
-  rather than quoting the protocol.
+  itself. Those are retried for a few seconds. A douser or picture mute command that is still
+  refused is held and applied as soon as the head settles, rather than being lost.
+- The projector answers `02H 03H` both while it is busy and when manual control is locked out, for
+  instance because metadata or GPIO control is enabled. The integration tells the two apart by the
+  process status: refused while the head reports Standby or Running means locked, not busy, and is
+  reported as such instead of suggesting you wait.
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
 

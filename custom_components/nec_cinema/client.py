@@ -38,6 +38,15 @@ class NecNakError(NecError):
         self.code = code
 
 
+class NecLockedError(NecNakError):
+    """The projector refused because manual control is locked out.
+
+    The projector answers 02H 03H both while it is busy and when something
+    else holds control, such as metadata or GPIO. Waiting only helps in the
+    first case.
+    """
+
+
 class NecClient:
     """Request/response client with a single, reused TCP connection."""
 

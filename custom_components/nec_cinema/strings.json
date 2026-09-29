@@ -143,6 +143,17 @@
       },
       "lamp2_remaining": {
         "name": "Lamp 2 remaining"
+      },
+      "last_command": {
+        "name": "Last command",
+        "state": {
+          "ok": "Accepted",
+          "held": "Held until ready",
+          "busy": "Refused, projector busy",
+          "locked": "Refused, control locked",
+          "refused": "Refused",
+          "failed": "Not reached"
+        }
       }
     },
     "button": {
@@ -227,7 +238,10 @@
   },
   "exceptions": {
     "command_busy": {
-      "message": "The projector is busy starting up, cooling down or switching, and did not accept the command. Try again once it reports Running."
+      "message": "The projector is busy ({status}) and did not accept the command. It was reported as: {reason}"
+    },
+    "command_locked": {
+      "message": "The projector reports {status}, so it is not busy, but it refused the command anyway: {reason}. This usually means manual control is locked out, for example because metadata or GPIO control is enabled on the projector."
     },
     "command_refused": {
       "message": "The projector refused the command: {reason}"

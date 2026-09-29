@@ -103,9 +103,30 @@ LIGHT_MODE_CODES: Final = {name: code for code, name in LIGHT_MODES.items()}
 LIGHT_MODE_UNKNOWN: Final = "unknown_mode"
 
 # NAK codes that mean "busy right now", worth retrying, rather than "never".
+# Note that 02H 03H is ambiguous: the projector uses it both while it is busy
+# and when manual control is locked out, for instance because metadata or GPIO
+# control is enabled. The process status tells the two apart.
 TRANSIENT_NAK_CODES: Final = frozenset({(0x07, 0x00), (0x02, 0x02), (0x02, 0x03)})
-COMMAND_ATTEMPTS: Final = 3
-COMMAND_RETRY_DELAY: Final = 1.5
+COMMAND_ATTEMPTS: Final = 4
+COMMAND_RETRY_DELAY: Final = 2.0
+
+# Process statuses in which the projector is settled rather than transitioning.
+SETTLED_STATUSES: Final = frozenset({"standby", "running_light_on", "running_light_off"})
+
+# Commands worth holding on to until the projector is ready for them, keyed by
+# the thing they control so a later opposite command replaces an earlier one.
+DEFERRABLE_ACTIONS: Final = {
+    "douser_open": "douser",
+    "douser_close": "douser",
+    "picture_mute_on": "picture_mute",
+    "picture_mute_off": "picture_mute",
+}
+
+# Outcomes recorded for the last command sensor.
+COMMAND_OUTCOMES: Final = ("ok", "held", "busy", "locked", "refused", "failed")
+
+# Give up on a held command after this many seconds.
+PENDING_TIMEOUT: Final = 300
 
 # --- Ports (INPUT SW CHANGE 018 / INPUT TERMINAL REQUEST 068) --------------
 # Switching object 05H = "Port Switching", used by the NC series.

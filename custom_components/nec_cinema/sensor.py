@@ -16,7 +16,7 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN, PROCESS_STATUS, PROCESS_STATUS_UNKNOWN
+from .const import COMMAND_OUTCOMES, DOMAIN, PROCESS_STATUS, PROCESS_STATUS_UNKNOWN
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
@@ -35,6 +35,7 @@ async def async_setup_entry(
         NecCurrentTitle(coordinator),
         NecErrors(coordinator),
         NecLastSeen(coordinator),
+        NecLastCommand(coordinator),
     ]
     if coordinator.light_hours_detailed:
         entities.append(NecLampStrikes(coordinator))
@@ -342,3 +343,44 @@ class NecTemperature(NecCinemaEntity, SensorEntity):
     def native_value(self) -> float | None:
         """Return the measured temperature."""
         return self.coordinator.data.temperatures.get(self._sensor_name)
+
+
+class NecLastCommand(NecCinemaEntity, SensorEntity):
+    """How the most recent command to the projector went.
+
+    Put on a dashboard, this saves digging through the log after a command is
+    refused: the wording the projector used, the status it was in and the raw
+    NAK code are all attributes.
+    """
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = list(COMMAND_OUTCOMES)
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "last_command")
+
+    @property
+    def available(self) -> bool:
+        """Remain available while the projector is unreachable."""
+        return True
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the outcome of the last command."""
+        last = self.coordinator.last_command
+        return last["outcome"] if last else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Return the detail behind that outcome."""
+        last = self.coordinator.last_command or {}
+        return {
+            "message": last.get("message"),
+            "action": last.get("action"),
+            "code": last.get("code"),
+            "projector_status": last.get("projector_status"),
+            "at": last.get("at"),
+            "pending": self.coordinator.pending_actions,
+        }

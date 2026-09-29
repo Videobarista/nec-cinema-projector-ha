@@ -143,6 +143,17 @@
       },
       "lamp2_remaining": {
         "name": "Lamp 2 resterend"
+      },
+      "last_command": {
+        "name": "Laatste commando",
+        "state": {
+          "ok": "Geaccepteerd",
+          "held": "Vastgehouden tot gereed",
+          "busy": "Geweigerd, projector bezig",
+          "locked": "Geweigerd, bediening geblokkeerd",
+          "refused": "Geweigerd",
+          "failed": "Niet bereikt"
+        }
       }
     },
     "button": {
@@ -227,7 +238,10 @@
   },
   "exceptions": {
     "command_busy": {
-      "message": "De projector is bezig met opstarten, afkoelen of schakelen en accepteerde het commando niet. Probeer het opnieuw zodra de status In bedrijf is."
+      "message": "De projector is bezig ({status}) en accepteerde het commando niet. Hij meldde: {reason}"
+    },
+    "command_locked": {
+      "message": "De projector meldt {status} en is dus niet bezig, maar weigerde het commando toch: {reason}. Meestal betekent dat dat handbediening geblokkeerd is, bijvoorbeeld doordat metadata of GPIO-besturing op de projector aanstaat."
     },
     "command_refused": {
       "message": "De projector weigerde het commando: {reason}"

@@ -9,7 +9,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import NecError, NecNakError
+from .client import NecError, NecLockedError, NecNakError
 from .const import DOMAIN, TRANSIENT_NAK_CODES
 from .coordinator import NecCinemaCoordinator
 
@@ -47,10 +47,24 @@ class NecCinemaEntity(CoordinatorEntity[NecCinemaCoordinator]):
         """
         try:
             await self.coordinator.async_send(action, *args)
+        except NecLockedError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="command_locked",
+                translation_placeholders={
+                    "status": self.coordinator.data.process_status,
+                    "reason": str(err),
+                },
+            ) from err
         except NecNakError as err:
             if err.code in TRANSIENT_NAK_CODES:
                 raise HomeAssistantError(
-                    translation_domain=DOMAIN, translation_key="command_busy"
+                    translation_domain=DOMAIN,
+                    translation_key="command_busy",
+                    translation_placeholders={
+                        "status": self.coordinator.data.process_status,
+                        "reason": str(err),
+                    },
                 ) from err
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
