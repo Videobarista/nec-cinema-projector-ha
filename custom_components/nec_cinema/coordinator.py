@@ -31,6 +31,7 @@ from .const import (
     LEGACY_LAMP_OUTPUT_TYPES,
     LEGACY_LAMP_TYPES,
     LEGACY_TEMP_NAMES,
+    LIGHT_MODE_CODES,
     LIGHT_MODE_UNKNOWN,
     LIGHT_MODES,
     MODEL_TYPES,
@@ -133,6 +134,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._learned: dict[int, str] = {}
         self._pending: dict[str, tuple[str, tuple[Any, ...], float]] = {}
         self.last_command: dict[str, Any] | None = None
+        self.desired_light_mode: str | None = None
         self._poll_count = 0
         self._first_poll_done = False
 
@@ -181,6 +183,9 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 for key, value in stored.get("macros", {}).items()
                 if str(key).isdigit()
             }
+            desired = stored.get("desired_light_mode")
+            if desired in LIGHT_MODE_CODES:
+                self.desired_light_mode = desired
 
     @property
     def learned_macros(self) -> dict[int, str]:
@@ -199,13 +204,63 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             return
         self._learned[number] = name
         _LOGGER.debug("learned preset %s = %s", number, name)
-        self._store.async_delay_save(lambda: {"macros": self._learned}, SAVE_DELAY)
+        self._save()
+
+    def _save(self) -> None:
+        """Persist what the integration remembers on the user's behalf."""
+        self._store.async_delay_save(
+            lambda: {
+                "macros": self._learned,
+                "desired_light_mode": self.desired_light_mode,
+            },
+            SAVE_DELAY,
+        )
 
     async def async_forget_macros(self) -> None:
         """Drop every learned preset name."""
         self._learned = {}
-        await self._store.async_save({"macros": {}})
+        self._save()
         self.async_update_listeners()
+
+    async def async_set_desired_light_mode(self, mode: str) -> None:
+        """Record which light control mode the projector should be kept in.
+
+        The projector treats this mode as a temporary override and clears it by
+        itself while in standby, so "forced off" would never survive a power
+        cycle. Remembering the choice here and applying it again when the head
+        powers up is what makes the setting stick.
+        """
+        self.desired_light_mode = mode
+        self._save()
+        await self.async_send("set_light_mode", LIGHT_MODE_CODES[mode])
+
+    async def async_apply_desired_light_mode(self) -> None:
+        """Re-apply the wanted light control mode, ignoring what the head reports."""
+        if self.desired_light_mode is None:
+            return
+        await self.async_send("set_light_mode", LIGHT_MODE_CODES[self.desired_light_mode])
+
+    async def _enforce_light_mode(self, data: ProjectorData) -> None:
+        """Put the wanted mode back while the projector is starting or stopping.
+
+        A settled head is left alone: the mode may well have been changed on the
+        touch panel on purpose, and overruling that would be rude.
+        """
+        desired = self.desired_light_mode
+        if (
+            desired is None
+            or desired == data.light_mode
+            or data.light_mode == LIGHT_MODE_UNKNOWN
+            or data.process_status in SETTLED_STATUSES
+        ):
+            return
+        try:
+            await self.projector.set_light_mode(LIGHT_MODE_CODES[desired])
+        except (NecError, NecNakError) as err:
+            _LOGGER.debug("could not restore the light control mode: %s", err)
+        else:
+            _LOGGER.info("restored light control mode %s after the projector cleared it", desired)
+            data.light_mode = desired
 
     def _resolve_model(self, reported: str) -> str:
         """Return the most specific model name available.
@@ -310,6 +365,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             return data
 
         self._first_poll_done = True
+        await self._enforce_light_mode(data)
         await self._apply_pending(data)
         self._learn_macro(data)
         data.available = True
@@ -540,7 +596,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                             args,
                             self.hass.loop.time(),
                         )
-                        _LOGGER.warning(
+                        _LOGGER.info(
                             "projector busy (%s); holding %s until it is ready",
                             self.data.process_status if self.data else "unknown",
                             action,

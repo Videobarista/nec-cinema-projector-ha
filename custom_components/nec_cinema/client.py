@@ -441,14 +441,6 @@ class NecProjector:
         if len(data) >= 2 and data[1] != 0x00:
             raise NecNakError("projector could not change the light control mode", None)
 
-    async def light_on(self) -> None:
-        """Light the lamp or laser."""
-        await self.set_light_mode(0x01)
-
-    async def light_off(self) -> None:
-        """Extinguish the lamp or laser, leaving the projector powered."""
-        await self.set_light_mode(0x02)
-
     async def temperature_modern(self, index: int) -> float | None:
         """COMMON CURRENT STATUS REQUEST (300-20.)."""
         data = (await self.client.request(0x00, 0xD3, bytes((0x20, 0x03, index)))).data

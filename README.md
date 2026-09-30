@@ -120,11 +120,20 @@ puts the head in "light off mode", where it stays dark until the switch is
 turned back on or the **Light control mode** select is put back to *Follow
 projector power*. If a projector refuses to ignite, check that select first.
 
-The projector clears its own light control mode when it powers up, so a head set
-to "forced off" would light anyway. Turning the projector on through this
-integration sets the mode again straight after the power command, before the
-lamp has had time to strike, so powering up without light works as asked. The
-integration does not otherwise change the mode on your behalf.
+The projector treats this mode as a temporary override rather than a setting:
+while it sits in standby it quietly puts the mode back to *Follow projector
+power* on its own, with no command from anywhere. A head set to "forced off"
+would therefore light on the next power-up.
+
+So the **Light control mode** select holds your choice rather than the
+projector's reading. The choice survives a restart, is applied again right after
+a power-on before the lamp can strike, and is restored if the projector clears
+it while starting or stopping. A projector that has settled is left alone, so a
+change made on the touch panel is not overruled. What the head itself reports is
+available as the `projector_mode` attribute of the select.
+
+The **Light source** switch drives the same setting, so it moves that standing
+choice with it: switching the light off is the same as choosing *Forced off*.
 
 ## Seeing why a command was refused
 

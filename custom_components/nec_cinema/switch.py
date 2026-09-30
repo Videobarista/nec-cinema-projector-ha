@@ -7,8 +7,10 @@ from typing import Any
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
+from .client import NecError, NecNakError
 from .const import DOMAIN
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
@@ -57,11 +59,26 @@ class NecLightSwitch(NecCinemaEntity, SwitchEntity):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Light the lamp or laser."""
-        await self.async_run_command("light_on")
+        await self._set_mode("on")
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Extinguish the lamp or laser."""
-        await self.async_run_command("light_off")
+        await self._set_mode("off")
+
+    async def _set_mode(self, mode: str) -> None:
+        """Change the light control mode, and the standing choice with it.
+
+        The switch and the Light control mode select drive the same setting, so
+        the switch has to move the standing choice too. Leaving it behind would
+        have the integration put the old mode back the next time the projector
+        is starting or stopping.
+        """
+        try:
+            await self.coordinator.async_set_desired_light_mode(mode)
+        except NecNakError as err:
+            raise HomeAssistantError(f"The projector refused the command: {err}") from err
+        except NecError as err:
+            raise HomeAssistantError(f"Could not reach the projector: {err}") from err
 
 
 class NecPictureMute(NecCinemaEntity, SwitchEntity):
