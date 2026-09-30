@@ -459,6 +459,59 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
 
     # --------------------------------------------------------------- commands
 
+    def _record(self, action: str, outcome: str, message: str) -> None:
+        """Remember how the last command went, for the diagnostic sensor."""
+        status = self.data.process_status if self.data else PROCESS_STATUS_UNKNOWN
+        self.last_command = {
+            "action": action,
+            "outcome": outcome,
+            "message": message,
+            "code": None,
+            "projector_status": status,
+            "at": dt_util.utcnow(),
+        }
+
+    def _record_error(self, action: str, outcome: str, err: Exception) -> None:
+        """Remember a failed command, including the projector's own wording."""
+        self._record(action, outcome, f"{action}: {err}")
+        if isinstance(err, NecNakError) and err.code and self.last_command:
+            self.last_command["code"] = f"{err.code[0]:02X}H {err.code[1]:02X}H"
+
+    @property
+    def settled(self) -> bool:
+        """Whether the projector is idle rather than starting, cooling or switching."""
+        return bool(self.data and self.data.process_status in SETTLED_STATUSES)
+
+    @property
+    def pending_actions(self) -> list[str]:
+        """Return the commands waiting for the projector to settle."""
+        return [held[0] for held in self._pending.values()]
+
+    async def _apply_pending(self, data: ProjectorData) -> None:
+        """Run commands that were refused while the projector was transitioning."""
+        if not self._pending or data.process_status not in SETTLED_STATUSES:
+            return
+        now = self.hass.loop.time()
+        for group, (action, args, queued_at) in list(self._pending.items()):
+            del self._pending[group]
+            if now - queued_at > PENDING_TIMEOUT:
+                _LOGGER.warning("giving up on held command %s: projector stayed busy", action)
+                continue
+            try:
+                await getattr(self.projector, action)(*args)
+            except (NecError, NecNakError) as err:
+                _LOGGER.warning("held command %s still refused: %s", action, err)
+                self._record_error(action, "refused", err)
+            else:
+                _LOGGER.info("held command %s applied now the projector is ready", action)
+                self._record(action, "ok", f"{action}: applied once the projector was ready")
+        try:
+            mute = await self.projector.mute_status()
+        except (NecError, NecNakError):
+            return
+        data.douser_closed = mute["douser_closed"]
+        data.picture_mute = mute["picture_mute"]
+
     async def async_send(self, action: str, *args: Any) -> None:
         """Run a projector command and refresh straight away.
 
