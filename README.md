@@ -118,29 +118,39 @@ its own, the **Light source** switch uses `LAMP CONTROL MODE SET` (235-19).
 That command sets a mode rather than pressing a button: turning the switch off
 puts the head in "light off mode", where it stays dark even after a power cycle,
 until the switch is turned back on or the **Light control mode** select is put
-back to *Follow projector power*. If a projector refuses to ignite, check that
-select first.
+back to *Follow projector power*. That is deliberate — it is how a head is
+powered up without lighting — and the integration never changes the mode on your
+behalf. If a projector refuses to ignite, check that select first.
 
 ## Seeing why a command was refused
 
 The **Last command** sensor holds the outcome of the most recent command, so a
-refusal does not have to be chased through the log. On a dashboard:
+refusal does not have to be chased through the log. It keeps that outcome until
+the next command, so a card should lead with the projector's current state and
+only mention the last command when something actually needs attention:
 
 ```yaml
 type: markdown
 content: >
-  **{{ states('sensor.projector_last_command') }}**
+  {% set last = 'sensor.projector_last_command' %}
+  {% set outcome = states(last) %}
+  {% set pending = state_attr(last, 'pending') %}
 
-  {{ state_attr('sensor.projector_last_command', 'message') }}
+  ## {{ states('sensor.projector_status') }}
 
-  Projector status: {{ state_attr('sensor.projector_last_command', 'projector_status') }}
-  {% if state_attr('sensor.projector_last_command', 'code') %}
-  Refusal code: {{ state_attr('sensor.projector_last_command', 'code') }}
-  {% endif %}
-  {% if state_attr('sensor.projector_last_command', 'pending') %}
-  Waiting to be applied: {{ state_attr('sensor.projector_last_command', 'pending') | join(', ') }}
+  {% if pending %}
+  Waiting for the projector: {{ pending | join(', ') }}
+  {% elif outcome in ['ok', 'unknown', 'unavailable'] %}
+  No problems.
+  {% else %}
+  **{{ state_attr(last, 'message') }}**
+  {% if state_attr(last, 'code') %} (code {{ state_attr(last, 'code') }}){% endif %}
+  while the projector reported {{ state_attr(last, 'projector_status') }},
+  {{ relative_time(as_datetime(state_attr(last, 'at'))) }} ago.
   {% endif %}
 ```
+
+Replace the two entity ids with your own.
 
 ## Media block (IMS / IMB)
 

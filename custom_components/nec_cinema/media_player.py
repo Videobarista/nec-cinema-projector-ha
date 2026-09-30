@@ -126,14 +126,17 @@ class NecProjectorMediaPlayer(NecCinemaEntity, MediaPlayerEntity):
     # --------------------------------------------------------------- commands
 
     async def async_turn_on(self) -> None:
-        """Power the projector on, clearing any forced light mode first."""
-        await self.coordinator.async_reset_light_mode()
+        """Power the projector on.
+
+        The light control mode is left alone: a head set to "forced off" is
+        meant to power up without lighting, and the Light control mode select
+        shows what it is set to.
+        """
         await self.async_run_command("power_on")
 
     async def async_turn_off(self) -> None:
-        """Power the projector off and clear any forced light mode."""
+        """Power the projector off."""
         await self.async_run_command("power_off")
-        await self.coordinator.async_reset_light_mode()
 
     async def async_select_source(self, source: str) -> None:
         """Switch the input port."""
