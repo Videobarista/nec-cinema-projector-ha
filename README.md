@@ -116,11 +116,15 @@ second.
 its own, the **Light source** switch uses `LAMP CONTROL MODE SET` (235-19).
 
 That command sets a mode rather than pressing a button: turning the switch off
-puts the head in "light off mode", where it stays dark even after a power cycle,
-until the switch is turned back on or the **Light control mode** select is put
-back to *Follow projector power*. That is deliberate — it is how a head is
-powered up without lighting — and the integration never changes the mode on your
-behalf. If a projector refuses to ignite, check that select first.
+puts the head in "light off mode", where it stays dark until the switch is
+turned back on or the **Light control mode** select is put back to *Follow
+projector power*. If a projector refuses to ignite, check that select first.
+
+The projector clears its own light control mode when it powers up, so a head set
+to "forced off" would light anyway. Turning the projector on through this
+integration sets the mode again straight after the power command, before the
+lamp has had time to strike, so powering up without light works as asked. The
+integration does not otherwise change the mode on your behalf.
 
 ## Seeing why a command was refused
 
@@ -140,9 +144,7 @@ content: >
 
   {% if pending %}
   Waiting for the projector: {{ pending | join(', ') }}
-  {% elif outcome in ['ok', 'unknown', 'unavailable'] %}
-  No problems.
-  {% else %}
+  {% elif outcome not in ['ok', 'unknown', 'unavailable'] %}
   **{{ state_attr(last, 'message') }}**
   {% if state_attr(last, 'code') %} (code {{ state_attr(last, 'code') }}){% endif %}
   while the projector reported {{ state_attr(last, 'projector_status') }},

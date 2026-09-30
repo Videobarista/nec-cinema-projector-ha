@@ -330,7 +330,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             data.lamp2_remaining = previous.lamp2_remaining
             data.lamp2_strikes = previous.lamp2_strikes
             data.light_power = previous.light_power
-            data.light_mode = previous.light_mode
             data.lamp_mode = previous.lamp_mode
             data.temperatures = previous.temperatures
         return data
@@ -348,6 +347,13 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         data.cooling = running["cooling"]
         data.cooling_remaining = running["cooling_remaining"]
         data.external_control = running["external_control"]
+
+        try:
+            data.light_mode = LIGHT_MODES.get(
+                await self.projector.light_mode(), LIGHT_MODE_UNKNOWN
+            )
+        except NecNakError as err:
+            _LOGGER.debug("lamp control mode refused: %s", err)
 
         if self.lamp_output_kind == "watt":
             try:
@@ -411,13 +417,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 )
             except (NecError, NecNakError) as err:
                 _LOGGER.debug("lamp mode failed: %s", err)
-
-        try:
-            data.light_mode = LIGHT_MODES.get(
-                await self.projector.light_mode(), LIGHT_MODE_UNKNOWN
-            )
-        except (NecError, NecNakError) as err:
-            _LOGGER.debug("lamp control mode failed: %s", err)
 
         try:
             data.errors = await self._read_errors()

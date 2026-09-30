@@ -120,6 +120,7 @@ DEFERRABLE_ACTIONS: Final = {
     "douser_close": "douser",
     "picture_mute_on": "picture_mute",
     "picture_mute_off": "picture_mute",
+    "set_light_mode": "light_mode",
 }
 
 # Outcomes recorded for the last command sensor.
