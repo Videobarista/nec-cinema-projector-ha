@@ -110,8 +110,14 @@ TRANSIENT_NAK_CODES: Final = frozenset({(0x07, 0x00), (0x02, 0x02), (0x02, 0x03)
 COMMAND_ATTEMPTS: Final = 4
 COMMAND_RETRY_DELAY: Final = 2.0
 
-# Process statuses in which the projector is settled rather than transitioning.
-SETTLED_STATUSES: Final = frozenset({"standby", "running_light_on", "running_light_off"})
+# Process statuses grouped by phase. Commands are applied while running, held
+# while starting up, and dropped while shutting down: the projector closes the
+# douser by itself on the way to standby.
+RUNNING_STATUSES: Final = frozenset({"running_light_on", "running_light_off"})
+SHUTDOWN_STATUSES: Final = frozenset({"cooling", "standby"})
+STARTUP_STATUSES: Final = frozenset(
+    {"power_on_protect", "ignition", "power_on_running", "lamp_retry", "reset_wait"}
+)
 
 # Commands worth holding on to until the projector is ready for them, keyed by
 # the thing they control so a later opposite command replaces an earlier one.
@@ -124,10 +130,11 @@ DEFERRABLE_ACTIONS: Final = {
 }
 
 # Outcomes recorded for the last command sensor.
-COMMAND_OUTCOMES: Final = ("ok", "held", "busy", "locked", "refused", "failed")
+COMMAND_OUTCOMES: Final = ("ok", "held", "skipped", "busy", "locked", "refused", "failed")
 
-# Give up on a held command after this many seconds.
-PENDING_TIMEOUT: Final = 300
+# Give up on a held command after this many seconds. Generous enough to cover
+# a full ignition, which can take a couple of minutes.
+PENDING_TIMEOUT: Final = 900
 
 # --- Ports (INPUT SW CHANGE 018 / INPUT TERMINAL REQUEST 068) --------------
 # Switching object 05H = "Port Switching", used by the NC series.

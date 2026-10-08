@@ -38,6 +38,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await coordinator.async_config_entry_first_refresh()
     _remove_unsupported_lamp_sensors(hass, coordinator)
+    _remove_retired_entities(hass, coordinator)
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -67,6 +68,22 @@ def _remove_unsupported_lamp_sensors(
         )
         if entity_id:
             _LOGGER.debug("removing unsupported entity %s", entity_id)
+            registry.async_remove(entity_id)
+
+
+def _remove_retired_entities(hass: HomeAssistant, coordinator: NecCinemaCoordinator) -> None:
+    """Drop entities that earlier versions created and this one no longer does.
+
+    The Light control mode select was replaced in 1.11 by the Light source
+    switch, for now, and the Start dark switch, for the next power-up.
+    """
+    registry = er.async_get(hass)
+    for platform, key in (("select", "light_mode"),):
+        entity_id = registry.async_get_entity_id(
+            platform, DOMAIN, f"{coordinator.device_identifier}_{key}"
+        )
+        if entity_id:
+            _LOGGER.debug("removing retired entity %s", entity_id)
             registry.async_remove(entity_id)
 
 

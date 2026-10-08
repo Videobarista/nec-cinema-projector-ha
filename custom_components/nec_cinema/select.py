@@ -9,16 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import NecError, NecNakError
-from .const import (
-    CONF_MACROS,
-    DOMAIN,
-    LAMP_MODE_CODES,
-    LAMP_MODE_UNKNOWN,
-    LAMP_MODES,
-    LIGHT_MODE_UNKNOWN,
-    LIGHT_MODES,
-)
+from .const import CONF_MACROS, DOMAIN, LAMP_MODE_CODES, LAMP_MODE_UNKNOWN, LAMP_MODES
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
@@ -45,7 +36,6 @@ async def async_setup_entry(
     """Set up the selects."""
     coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
     entities: list[SelectEntity] = [
-        NecLightModeSelect(coordinator),
         NecMacroSelect(coordinator, entry),
     ]
     if coordinator.has_lamp_mode:
@@ -97,43 +87,6 @@ class NecMacroSelect(NecCinemaEntity, SelectEntity):
         if number is None:
             raise HomeAssistantError(f"Unknown macro: {option}")
         await self.async_run_command("select_macro", number)
-
-
-class NecLightModeSelect(NecCinemaEntity, SelectEntity):
-    """The light control mode: follow power, forced on, or forced off."""
-
-    _attr_entity_category = EntityCategory.CONFIG
-    _attr_options = list(LIGHT_MODES.values())
-
-    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
-        """Initialise the select."""
-        super().__init__(coordinator, "light_mode")
-
-    @property
-    def current_option(self) -> str | None:
-        """Return the mode that should be in force.
-
-        The projector clears this mode by itself while in standby, so what it
-        reports is not what was asked for. Showing the choice keeps the setting
-        meaningful; the projector's own reading is an attribute.
-        """
-        desired = self.coordinator.desired_light_mode
-        if desired is not None:
-            return desired
-        mode = self.coordinator.data.light_mode
-        return None if mode == LIGHT_MODE_UNKNOWN else mode
-
-    @property
-    def extra_state_attributes(self) -> dict[str, str]:
-        """Expose what the projector itself currently reports."""
-        return {"projector_mode": self.coordinator.data.light_mode}
-
-    async def async_select_option(self, option: str) -> None:
-        """Remember and apply the light control mode."""
-        try:
-            await self.coordinator.async_set_desired_light_mode(option)
-        except (NecError, NecNakError) as err:
-            raise HomeAssistantError(f"Could not set the light control mode: {err}") from err
 
 
 class NecLampModeSelect(NecCinemaEntity, SelectEntity):

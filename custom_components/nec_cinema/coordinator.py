@@ -31,7 +31,6 @@ from .const import (
     LEGACY_LAMP_OUTPUT_TYPES,
     LEGACY_LAMP_TYPES,
     LEGACY_TEMP_NAMES,
-    LIGHT_MODE_CODES,
     LIGHT_MODE_UNKNOWN,
     LIGHT_MODES,
     MODEL_TYPES,
@@ -41,8 +40,10 @@ from .const import (
     PORT_NAMES,
     PROCESS_STATUS,
     PROCESS_STATUS_UNKNOWN,
-    SETTLED_STATUSES,
+    RUNNING_STATUSES,
+    SHUTDOWN_STATUSES,
     SLOW_POLL_EVERY,
+    STARTUP_STATUSES,
     TRANSIENT_NAK_CODES,
 )
 
@@ -52,6 +53,10 @@ MAX_ERROR_STRINGS = 6
 
 STORAGE_VERSION = 1
 SAVE_DELAY = 10
+
+# Longest believable cooling timer, in seconds. The projector fills the field
+# with FFFFH outside the cooling phase; anything this long is not a timer.
+MAX_COOLING_TIME = 3600
 
 
 @dataclass
@@ -68,6 +73,7 @@ class ProjectorData:
     power_processing: bool = False
     cooling: bool = False
     cooling_remaining: int | None = None
+    cooling_progress: int | None = None
     external_control: bool = False
 
     douser_closed: bool | None = None
@@ -134,7 +140,12 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._learned: dict[int, str] = {}
         self._pending: dict[str, tuple[str, tuple[Any, ...], float]] = {}
         self.last_command: dict[str, Any] | None = None
-        self.desired_light_mode: str | None = None
+        self.start_dark = False
+        self._light_override = False
+        self._cooling_phase = False
+        self._cooling_watched = False
+        self._cooling_total = 0
+        self._cooling_learned = 0
         self._poll_count = 0
         self._first_poll_done = False
 
@@ -183,9 +194,14 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 for key, value in stored.get("macros", {}).items()
                 if str(key).isdigit()
             }
-            desired = stored.get("desired_light_mode")
-            if desired in LIGHT_MODE_CODES:
-                self.desired_light_mode = desired
+            # Version 1.10 stored a wanted light control mode; "off" meant the
+            # same as starting dark does now.
+            self.start_dark = bool(
+                stored.get("start_dark", stored.get("desired_light_mode") == "off")
+            )
+            learned = stored.get("cooling_time")
+            if isinstance(learned, int) and 0 < learned <= MAX_COOLING_TIME:
+                self._cooling_learned = learned
 
     @property
     def learned_macros(self) -> dict[int, str]:
@@ -211,7 +227,8 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._store.async_delay_save(
             lambda: {
                 "macros": self._learned,
-                "desired_light_mode": self.desired_light_mode,
+                "start_dark": self.start_dark,
+                "cooling_time": self._cooling_learned,
             },
             SAVE_DELAY,
         )
@@ -222,45 +239,111 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._save()
         self.async_update_listeners()
 
-    async def async_set_desired_light_mode(self, mode: str) -> None:
-        """Record which light control mode the projector should be kept in.
+    def _track_cooling(self, data: ProjectorData, remaining: int) -> None:
+        """Report cooling time only while cooling, plus how far along it is.
 
-        The projector treats this mode as a temporary override and clears it by
-        itself while in standby, so "forced off" would never survive a power
-        cycle. Remembering the choice here and applying it again when the head
-        powers up is what makes the setting stick.
+        Outside the cooling phase the projector's field holds nothing useful, so
+        it reads as zero. The progress is the time left against the full cooling
+        time, so a bar card empties from 100 to 0 without being told how long
+        the projector takes to cool.
+
+        The full time is the longest reading of the phase. When Home Assistant
+        joins a phase already under way, for instance after a restart, its
+        first reading is too short to be the full time, so the full time of the
+        last phase watched from the start is used instead. That is remembered
+        across restarts.
         """
-        self.desired_light_mode = mode
-        self._save()
-        await self.async_send("set_light_mode", LIGHT_MODE_CODES[mode])
-
-    async def async_apply_desired_light_mode(self) -> None:
-        """Re-apply the wanted light control mode, ignoring what the head reports."""
-        if self.desired_light_mode is None:
+        if data.process_status != "cooling":
+            if (
+                self._cooling_watched
+                and self._cooling_total
+                and self._cooling_total != self._cooling_learned
+            ):
+                self._cooling_learned = self._cooling_total
+                _LOGGER.debug("learned cooling time: %s s", self._cooling_learned)
+                self._save()
+            self._cooling_phase = False
+            self._cooling_watched = False
+            self._cooling_total = 0
+            data.cooling_remaining = 0
+            data.cooling_progress = 0
             return
-        await self.async_send("set_light_mode", LIGHT_MODE_CODES[self.desired_light_mode])
 
-    async def _enforce_light_mode(self, data: ProjectorData) -> None:
-        """Put the wanted mode back while the projector is starting or stopping.
+        if not self._cooling_phase:
+            previous = self.data
+            self._cooling_phase = True
+            self._cooling_watched = (
+                previous is not None
+                and previous.available
+                and previous.process_status != "cooling"
+            )
+            self._cooling_total = 0 if self._cooling_watched else self._cooling_learned
 
-        A settled head is left alone: the mode may well have been changed on the
-        touch panel on purpose, and overruling that would be rude.
+        if remaining <= MAX_COOLING_TIME:
+            self._cooling_total = max(self._cooling_total, remaining)
+        data.cooling_remaining = remaining
+        data.cooling_progress = (
+            min(100, round(remaining * 100 / self._cooling_total)) if self._cooling_total else 100
+        )
+
+    async def async_set_start_dark(self, enabled: bool) -> None:
+        """Remember whether the projector should power up without lighting.
+
+        This only affects the next power-up. Choosing it never touches the lamp
+        now; the Light source switch is for that.
         """
-        desired = self.desired_light_mode
+        self.start_dark = enabled
+        self._save()
+        self.async_update_listeners()
+
+    async def async_set_light(self, on: bool) -> None:
+        """Light or extinguish the lamp now.
+
+        A light command given by hand takes over from starting dark for the
+        rest of this power cycle, so the two never fight.
+        """
+        self._light_override = True
+        await self.async_send("set_light_mode", 0x01 if on else 0x02)
+
+    async def async_prepare_dark_start(self) -> None:
+        """Set forced off just before a power-on issued from here.
+
+        The projector honours the light control mode at power-up when it was set
+        shortly before, so this is the most reliable moment. Best effort: if it
+        is refused, the standby upkeep below has usually set it already.
+        """
+        if not self.start_dark:
+            return
+        try:
+            await self.projector.set_light_mode(0x02)
+        except (NecError, NecNakError) as err:
+            _LOGGER.debug("forced off before power-on not accepted: %s", err)
+
+    async def _keep_start_dark(self, data: ProjectorData) -> None:
+        """Keep forced off in place while the projector waits in standby.
+
+        The projector clears its light control mode by itself the moment it
+        enters standby, but one set again in standby stays put and is honoured
+        at power-up. Putting it back whenever it has been cleared means a
+        power-up starts dark, including one from the touch panel. Once the head
+        is running the lamp is left to the Light source switch.
+        """
+        if data.process_status in SHUTDOWN_STATUSES:
+            self._light_override = False
         if (
-            desired is None
-            or desired == data.light_mode
-            or data.light_mode == LIGHT_MODE_UNKNOWN
-            or data.process_status in SETTLED_STATUSES
+            not self.start_dark
+            or self._light_override
+            or data.light_mode in ("off", LIGHT_MODE_UNKNOWN)
+            or data.process_status not in ("standby", *STARTUP_STATUSES)
         ):
             return
         try:
-            await self.projector.set_light_mode(LIGHT_MODE_CODES[desired])
+            await self.projector.set_light_mode(0x02)
         except (NecError, NecNakError) as err:
-            _LOGGER.debug("could not restore the light control mode: %s", err)
+            _LOGGER.debug("could not set forced off for a dark start: %s", err)
         else:
-            _LOGGER.info("restored light control mode %s after the projector cleared it", desired)
-            data.light_mode = desired
+            _LOGGER.debug("forced off set for a dark start")
+            data.light_mode = "off"
 
     def _resolve_model(self, reported: str) -> str:
         """Return the most specific model name available.
@@ -365,7 +448,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             return data
 
         self._first_poll_done = True
-        await self._enforce_light_mode(data)
+        await self._keep_start_dark(data)
         await self._apply_pending(data)
         self._learn_macro(data)
         data.available = True
@@ -401,7 +484,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         )
         data.power_processing = running["power_processing"]
         data.cooling = running["cooling"]
-        data.cooling_remaining = running["cooling_remaining"]
+        self._track_cooling(data, running["cooling_remaining"])
         data.external_control = running["external_control"]
 
         try:
@@ -533,9 +616,14 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             self.last_command["code"] = f"{err.code[0]:02X}H {err.code[1]:02X}H"
 
     @property
-    def settled(self) -> bool:
-        """Whether the projector is idle rather than starting, cooling or switching."""
-        return bool(self.data and self.data.process_status in SETTLED_STATUSES)
+    def running(self) -> bool:
+        """Whether the projector is up and running rather than in transition."""
+        return bool(self.data and self.data.process_status in RUNNING_STATUSES)
+
+    @property
+    def shutting_down(self) -> bool:
+        """Whether the projector is cooling down or in standby."""
+        return bool(self.data and self.data.process_status in SHUTDOWN_STATUSES)
 
     @property
     def pending_actions(self) -> list[str]:
@@ -543,14 +631,29 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         return [held[0] for held in self._pending.values()]
 
     async def _apply_pending(self, data: ProjectorData) -> None:
-        """Run commands that were refused while the projector was transitioning."""
-        if not self._pending or data.process_status not in SETTLED_STATUSES:
+        """Run commands that were refused while the projector was starting up.
+
+        They are applied once it runs. If it shuts down instead they are dropped:
+        the projector closes the douser by itself on the way to standby, and a
+        held "douser open" carried into standby would expose the DMD in an empty
+        auditorium.
+        """
+        if not self._pending:
+            return
+        if data.process_status in SHUTDOWN_STATUSES:
+            for action, _args, _queued_at in self._pending.values():
+                _LOGGER.info("dropping held command %s: the projector is shutting down", action)
+                self._record(action, "skipped", f"{action}: dropped, the projector shut down")
+            self._pending.clear()
+            return
+        if data.process_status not in RUNNING_STATUSES:
             return
         now = self.hass.loop.time()
         for group, (action, args, queued_at) in list(self._pending.items()):
             del self._pending[group]
             if now - queued_at > PENDING_TIMEOUT:
-                _LOGGER.warning("giving up on held command %s: projector stayed busy", action)
+                _LOGGER.info("giving up on held command %s: projector stayed busy", action)
+                self._record(action, "skipped", f"{action}: dropped, the projector stayed busy")
                 continue
             try:
                 await getattr(self.projector, action)(*args)
@@ -583,12 +686,23 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 if err.code not in TRANSIENT_NAK_CODES:
                     self._record_error(action, "refused", err)
                     raise
-                # While the head is settled the same code means manual control
+                # While the head is running the same code means manual control
                 # is locked out, not that it is busy. Waiting will not help.
-                if self.settled:
+                if self.running:
                     locked = NecLockedError(str(err), err.code)
                     self._record_error(action, "locked", locked)
                     raise locked from err
+                # Shutting down: the projector closes the douser by itself, and
+                # nothing held now should be carried into standby.
+                if self.shutting_down and action in DEFERRABLE_ACTIONS:
+                    _LOGGER.info("%s not needed: the projector is shutting down", action)
+                    self._record(
+                        action,
+                        "skipped",
+                        f"{action}: not applied, the projector is shutting down and "
+                        "closes the douser by itself",
+                    )
+                    return
                 if attempt == COMMAND_ATTEMPTS:
                     if action in DEFERRABLE_ACTIONS:
                         self._pending[DEFERRABLE_ACTIONS[action]] = (

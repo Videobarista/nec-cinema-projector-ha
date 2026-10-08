@@ -64,19 +64,14 @@
       },
       "light": {
         "name": "Lichtbron"
+      },
+      "start_dark": {
+        "name": "Donker opstarten"
       }
     },
     "select": {
       "macro": {
         "name": "Macro"
-      },
-      "light_mode": {
-        "name": "Lichtbronmodus",
-        "state": {
-          "standard": "Volgt projector aan/uit",
-          "on": "Geforceerd aan",
-          "off": "Geforceerd uit"
-        }
       },
       "lamp_mode": {
         "name": "Lampmodus",
@@ -152,8 +147,12 @@
           "busy": "Geweigerd, projector bezig",
           "locked": "Geweigerd, bediening geblokkeerd",
           "refused": "Geweigerd",
-          "failed": "Niet bereikt"
+          "failed": "Niet bereikt",
+          "skipped": "Niet nodig"
         }
+      },
+      "cooling_progress": {
+        "name": "Koelvoortgang"
       }
     },
     "button": {

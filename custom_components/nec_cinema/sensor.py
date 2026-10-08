@@ -32,6 +32,7 @@ async def async_setup_entry(
         NecProcessStatus(coordinator),
         NecLightHours(coordinator),
         NecCoolingRemaining(coordinator),
+        NecCoolingProgress(coordinator),
         NecCurrentTitle(coordinator),
         NecErrors(coordinator),
         NecLastSeen(coordinator),
@@ -244,11 +245,12 @@ class NecLampVolt(NecCinemaEntity, SensorEntity):
 
 
 class NecCoolingRemaining(NecCinemaEntity, SensorEntity):
-    """Remaining cooling time."""
+    """Remaining cooling time, zero outside the cooling phase."""
 
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
     _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_suggested_display_precision = 0
 
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
@@ -258,6 +260,27 @@ class NecCoolingRemaining(NecCinemaEntity, SensorEntity):
     def native_value(self) -> int | None:
         """Return the seconds of cooling left."""
         return self.coordinator.data.cooling_remaining
+
+
+class NecCoolingProgress(NecCinemaEntity, SensorEntity):
+    """Cooling time left as a percentage, for bar and gauge cards.
+
+    Runs from 100 down to 0 during cooling, and reads 0 otherwise. A gauge set
+    up on the cooling time in seconds would need its maximum set to however long
+    this projector takes to cool; this one does not.
+    """
+
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "cooling_progress")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the share of the cooling time still to go."""
+        return self.coordinator.data.cooling_progress
 
 
 class NecCurrentTitle(NecCinemaEntity, SensorEntity):

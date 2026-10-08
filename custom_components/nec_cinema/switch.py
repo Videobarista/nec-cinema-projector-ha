@@ -6,6 +6,7 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -26,6 +27,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             NecLightSwitch(coordinator),
+            NecStartDarkSwitch(coordinator),
             NecPictureMute(coordinator),
             NecDouserSwitch(coordinator),
         ]
@@ -66,19 +68,45 @@ class NecLightSwitch(NecCinemaEntity, SwitchEntity):
         await self._set_mode("off")
 
     async def _set_mode(self, mode: str) -> None:
-        """Change the light control mode, and the standing choice with it.
-
-        The switch and the Light control mode select drive the same setting, so
-        the switch has to move the standing choice too. Leaving it behind would
-        have the integration put the old mode back the next time the projector
-        is starting or stopping.
-        """
+        """Light or extinguish the lamp now."""
         try:
-            await self.coordinator.async_set_desired_light_mode(mode)
+            await self.coordinator.async_set_light(mode == "on")
         except NecNakError as err:
             raise HomeAssistantError(f"The projector refused the command: {err}") from err
         except NecError as err:
             raise HomeAssistantError(f"Could not reach the projector: {err}") from err
+
+
+class NecStartDarkSwitch(NecCinemaEntity, SwitchEntity):
+    """Power the projector up without lighting the lamp.
+
+    This is a preference for the next power-up, not a lamp control: turning it
+    on or off never touches the lamp now.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the switch."""
+        super().__init__(coordinator, "start_dark")
+
+    @property
+    def available(self) -> bool:
+        """A preference can be changed whether or not the projector answers."""
+        return True
+
+    @property
+    def is_on(self) -> bool:
+        """Return whether power-ups start dark."""
+        return self.coordinator.start_dark
+
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        """Start dark from the next power-up on."""
+        await self.coordinator.async_set_start_dark(True)
+
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        """Light the lamp at power-up as usual."""
+        await self.coordinator.async_set_start_dark(False)
 
 
 class NecPictureMute(NecCinemaEntity, SwitchEntity):

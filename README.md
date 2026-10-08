@@ -24,7 +24,7 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | --- | --- | --- |
 | Projector | `media_player` | On/off, input port selection, current title |
 | Light source | `switch` | Light the lamp or laser without cycling projector power |
-| Light control mode | `select` | Follow power, forced on, or forced off |
+| Start dark | `switch` | Power the projector up without lighting the lamp |
 | Lamp mode | `select` | Both lamps, lamp 1 only or lamp 2 only, on dual lamp heads |
 | Douser | `cover` (shutter) | Open and close the mechanical douser |
 | Douser open | `switch` | The same douser as a plain switch (disabled by default) |
@@ -38,7 +38,8 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Lamp strikes | `sensor` | How often the lamp has been struck |
 | Light output | `sensor` | Configured output power in percent (newer heads) |
 | Lamp power / current / voltage | `sensor` | Measured by the lamp power supply (NC3240S-A, NC3200S, NC2000C, NC1200C) |
-| Cooling remaining | `sensor` | Seconds of cooling left |
+| Cooling remaining | `sensor` | Seconds of cooling left, zero outside the cooling phase |
+| Cooling progress | `sensor` | Cooling time left in percent, 100 down to 0, for bar and gauge cards |
 | Current title | `sensor` | Title name, with title and preset number as attributes |
 | Active errors | `sensor` | Error count, with the decoded messages as an attribute |
 | Last seen | `sensor` | Timestamp of the last successful poll |
@@ -52,6 +53,12 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 
 Lamp status is read from the projector, never assumed. If the head is unreachable the media player
 reports **off**, the control port sensor goes off, and the other entities go unavailable.
+
+For a cooling bar, use **Cooling progress** rather than **Cooling remaining**. Gauge and bar cards
+default to a maximum of 100, so a five minute cool-down in seconds would sit at full until the last
+100 seconds. The percentage needs no maximum set, and still shows the right share after a Home
+Assistant restart halfway through cooling, because the integration remembers how long the last
+full cool-down took.
 
 ## Actions
 
@@ -112,28 +119,24 @@ second.
 
 ## Switching the light
 
-`POWER ON` and `POWER OFF` cover the whole head. To light the lamp or laser on
-its own, the **Light source** switch uses `LAMP CONTROL MODE SET` (235-19).
+There are two controls, each with one meaning.
 
-That command sets a mode rather than pressing a button: turning the switch off
-puts the head in "light off mode", where it stays dark until the switch is
-turned back on or the **Light control mode** select is put back to *Follow
-projector power*. If a projector refuses to ignite, check that select first.
+**Light source** acts now: it lights or extinguishes the lamp or laser without
+cycling projector power, through `LAMP CONTROL MODE SET` (235-19).
 
-The projector treats this mode as a temporary override rather than a setting:
-while it sits in standby it quietly puts the mode back to *Follow projector
-power* on its own, with no command from anywhere. A head set to "forced off"
-would therefore light on the next power-up.
+**Start dark** is a preference for the next power-up and never touches the lamp
+when you change it. With it on, the projector powers up without lighting, and
+the lamp is lit with the Light source switch when you want it.
 
-So the **Light control mode** select holds your choice rather than the
-projector's reading. The choice survives a restart, is applied again right after
-a power-on before the lamp can strike, and is restored if the projector clears
-it while starting or stopping. A projector that has settled is left alone, so a
-change made on the touch panel is not overruled. What the head itself reports is
-available as the `projector_mode` attribute of the select.
-
-The **Light source** switch drives the same setting, so it moves that standing
-choice with it: switching the light off is the same as choosing *Forced off*.
+Behind this sits a quirk of the projector. The light control mode it uses is a
+temporary override, not a setting: the projector clears it by itself the moment
+it enters standby. Set again once in standby, it stays put and is honoured at
+the next power-up. So with Start dark on, the integration sets forced off just
+before a power-up it issues, and puts it back as soon as the projector has
+cleared it on the way into standby. A power-up from the touch panel therefore
+starts dark as well. Once the projector is running, the lamp is left entirely to
+the Light source switch, and using that switch during a power-up takes over from
+Start dark until the next shutdown.
 
 ## Seeing why a command was refused
 
@@ -202,11 +205,13 @@ document, so the right ones are used without guessing:
 - The title list cannot be enumerated, only the current title is readable. Hence the macro naming
   in the options instead of a full list.
 - While the head is igniting, cooling or switching, it refuses commands with a NAK that clears by
-  itself. Those are retried for a few seconds. A douser or picture mute command that is still
-  refused is held and applied as soon as the head settles, rather than being lost.
+  itself. Those are retried for a few seconds. A douser or picture mute command refused while
+  the head is starting up is held and applied once it runs. One refused while it is shutting down
+  is dropped instead: the projector closes the douser by itself on the way to standby, and a
+  held "douser open" carried into standby would expose the DMD in an empty auditorium.
 - The projector answers `02H 03H` both while it is busy and when manual control is locked out, for
   instance because metadata or GPIO control is enabled. The integration tells the two apart by the
-  process status: refused while the head reports Standby or Running means locked, not busy, and is
+  process status: refused while the head reports Running means locked, not busy, and is
   reported as such instead of suggesting you wait.
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.

@@ -128,13 +128,12 @@ class NecProjectorMediaPlayer(NecCinemaEntity, MediaPlayerEntity):
     async def async_turn_on(self) -> None:
         """Power the projector on, keeping the light off if that was asked for.
 
-        The projector treats the light control mode as a temporary override and
-        clears it by itself, so a head set to "forced off" would light anyway.
-        Applying the wanted mode again right after the power command restores
-        it before the lamp has had time to strike.
+        With "start dark" on, forced off is set just before the power command:
+        the projector honours the light control mode at power-up when it was
+        set shortly before.
         """
+        await self.coordinator.async_prepare_dark_start()
         await self.async_run_command("power_on")
-        await self.coordinator.async_apply_desired_light_mode()
 
     async def async_turn_off(self) -> None:
         """Power the projector off."""

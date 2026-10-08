@@ -64,19 +64,14 @@
       },
       "light": {
         "name": "Light source"
+      },
+      "start_dark": {
+        "name": "Start dark"
       }
     },
     "select": {
       "macro": {
         "name": "Macro"
-      },
-      "light_mode": {
-        "name": "Light control mode",
-        "state": {
-          "standard": "Follow projector power",
-          "on": "Forced on",
-          "off": "Forced off"
-        }
       },
       "lamp_mode": {
         "name": "Lamp mode",
@@ -152,8 +147,12 @@
           "busy": "Refused, projector busy",
           "locked": "Refused, control locked",
           "refused": "Refused",
-          "failed": "Not reached"
+          "failed": "Not reached",
+          "skipped": "Not needed"
         }
+      },
+      "cooling_progress": {
+        "name": "Cooling progress"
       }
     },
     "button": {
