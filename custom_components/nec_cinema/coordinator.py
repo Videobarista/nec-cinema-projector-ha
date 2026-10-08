@@ -299,11 +299,18 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
     async def async_set_light(self, on: bool) -> None:
         """Light or extinguish the lamp now.
 
-        A light command given by hand takes over from starting dark for the
-        rest of this power cycle, so the two never fight.
+        A light command given by hand takes over from starting dark until the
+        projector next shuts down, so the two never fight. It is set before the
+        command because the refresh that follows runs the start dark upkeep, and
+        undone if the projector did not take the command.
         """
+        previous = self._light_override
         self._light_override = True
-        await self.async_send("set_light_mode", 0x01 if on else 0x02)
+        try:
+            await self.async_send("set_light_mode", 0x01 if on else 0x02)
+        except Exception:
+            self._light_override = previous
+            raise
 
     async def async_prepare_dark_start(self) -> None:
         """Set forced off just before a power-on issued from here.
@@ -311,8 +318,17 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         The projector honours the light control mode at power-up when it was set
         shortly before, so this is the most reliable moment. Best effort: if it
         is refused, the standby upkeep below has usually set it already.
+
+        Only from standby. Forced off on a running head puts the lamp out, and a
+        turn on sent to a projector that is already on, for instance by an
+        automation making sure, must leave the light alone.
         """
-        if not self.start_dark:
+        if (
+            not self.start_dark
+            or self._light_override
+            or not self.data
+            or self.data.process_status != "standby"
+        ):
             return
         try:
             await self.projector.set_light_mode(0x02)
@@ -325,17 +341,29 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         The projector clears its light control mode by itself the moment it
         enters standby, but one set again in standby stays put and is honoured
         at power-up. Putting it back whenever it has been cleared means a
-        power-up starts dark, including one from the touch panel. Once the head
+        power-up starts dark, including one from the touch panel.
+
+        During a power-up only the projector's own default (standard) is
+        overruled. Forced on means someone asked for light, from the Light
+        source switch or the touch panel, and that is left alone. Once the head
         is running the lamp is left to the Light source switch.
         """
-        if data.process_status in SHUTDOWN_STATUSES:
-            self._light_override = False
+        previous = self.data
         if (
-            not self.start_dark
-            or self._light_override
-            or data.light_mode in ("off", LIGHT_MODE_UNKNOWN)
-            or data.process_status not in ("standby", *STARTUP_STATUSES)
+            data.process_status in SHUTDOWN_STATUSES
+            and previous is not None
+            and previous.process_status not in SHUTDOWN_STATUSES
         ):
+            self._light_override = False
+        if not self.start_dark or self._light_override:
+            return
+        if data.process_status == "standby":
+            wanted = data.light_mode not in ("off", LIGHT_MODE_UNKNOWN)
+        elif data.process_status in STARTUP_STATUSES:
+            wanted = data.light_mode == "standard"
+        else:
+            wanted = False
+        if not wanted:
             return
         try:
             await self.projector.set_light_mode(0x02)
@@ -695,12 +723,16 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 # Shutting down: the projector closes the douser by itself, and
                 # nothing held now should be carried into standby.
                 if self.shutting_down and action in DEFERRABLE_ACTIONS:
-                    _LOGGER.info("%s not needed: the projector is shutting down", action)
+                    _LOGGER.info("%s not applied: the projector is shutting down", action)
+                    reason = (
+                        " and closes the douser by itself"
+                        if DEFERRABLE_ACTIONS[action] == "douser"
+                        else ""
+                    )
                     self._record(
                         action,
                         "skipped",
-                        f"{action}: not applied, the projector is shutting down and "
-                        "closes the douser by itself",
+                        f"{action}: not applied, the projector is shutting down{reason}",
                     )
                     return
                 if attempt == COMMAND_ATTEMPTS:

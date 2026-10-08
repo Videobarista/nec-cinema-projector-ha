@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from homeassistant.const import CONF_HOST
@@ -39,14 +40,18 @@ class NecCinemaEntity(CoordinatorEntity[NecCinemaCoordinator]):
         return super().available and self.coordinator.data.available
 
     async def async_run_command(self, action: str, *args: Any) -> None:
-        """Send a command, turning protocol errors into readable ones.
+        """Send a projector command, turning protocol errors into readable ones."""
+        await self.async_guarded(self.coordinator.async_send, action, *args)
+
+    async def async_guarded(self, call: Callable[..., Awaitable[None]], *args: Any) -> None:
+        """Run a coordinator call, turning protocol errors into readable ones.
 
         A head that is still igniting or cooling refuses commands with a NAK
         that clears by itself. The coordinator retries those; if they still
         fail, say so plainly instead of quoting the protocol at the user.
         """
         try:
-            await self.coordinator.async_send(action, *args)
+            await call(*args)
         except NecLockedError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,

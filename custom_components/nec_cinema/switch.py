@@ -8,10 +8,8 @@ from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .client import NecError, NecNakError
 from .const import DOMAIN
 from .coordinator import NecCinemaCoordinator
 from .entity import NecCinemaEntity
@@ -69,12 +67,7 @@ class NecLightSwitch(NecCinemaEntity, SwitchEntity):
 
     async def _set_mode(self, mode: str) -> None:
         """Light or extinguish the lamp now."""
-        try:
-            await self.coordinator.async_set_light(mode == "on")
-        except NecNakError as err:
-            raise HomeAssistantError(f"The projector refused the command: {err}") from err
-        except NecError as err:
-            raise HomeAssistantError(f"Could not reach the projector: {err}") from err
+        await self.async_guarded(self.coordinator.async_set_light, mode == "on")
 
 
 class NecStartDarkSwitch(NecCinemaEntity, SwitchEntity):

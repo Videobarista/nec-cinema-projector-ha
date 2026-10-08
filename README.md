@@ -131,12 +131,16 @@ the lamp is lit with the Light source switch when you want it.
 Behind this sits a quirk of the projector. The light control mode it uses is a
 temporary override, not a setting: the projector clears it by itself the moment
 it enters standby. Set again once in standby, it stays put and is honoured at
-the next power-up. So with Start dark on, the integration sets forced off just
-before a power-up it issues, and puts it back as soon as the projector has
-cleared it on the way into standby. A power-up from the touch panel therefore
-starts dark as well. Once the projector is running, the lamp is left entirely to
-the Light source switch, and using that switch during a power-up takes over from
-Start dark until the next shutdown.
+the next power-up. So with Start dark on, the integration puts forced off back
+as soon as the projector has cleared it on the way into standby, and sets it
+once more just before a power-up it issues. A power-up from the touch panel
+therefore starts dark as well.
+
+Start dark only ever overrules the projector's own default. A lamp switched on
+during a power-up, from the Light source switch or the touch panel, is left
+alone, and so is a running projector that is sent another turn on. Once the
+projector is running the lamp is left entirely to the Light source switch, and
+using that switch takes over from Start dark until the next shutdown.
 
 ## Seeing why a command was refused
 
