@@ -21,4 +21,4 @@ jobs:
       - name: Install Ruff
         run: pip install ruff
       - name: Lint
-        run: ruff check custom_components
+        run: ruff check .
