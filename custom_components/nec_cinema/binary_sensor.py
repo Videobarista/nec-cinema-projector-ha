@@ -18,15 +18,16 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary sensors."""
     coordinator = entry.runtime_data
-    async_add_entities(
-        [
-            NecLightOn(coordinator),
-            NecProblem(coordinator),
-            NecTestPattern(coordinator),
-            NecImbSelected(coordinator),
-            NecConnectivity(coordinator),
-        ]
-    )
+    entities: list[BinarySensorEntity] = [
+        NecLightOn(coordinator),
+        NecProblem(coordinator),
+        NecTestPattern(coordinator),
+        NecImbSelected(coordinator),
+        NecConnectivity(coordinator),
+    ]
+    if coordinator.lamp_details:
+        entities.extend([NecLampLit(coordinator, 1), NecLampLit(coordinator, 2)])
+    async_add_entities(entities)
 
 
 class NecLightOn(NecCinemaEntity, BinarySensorEntity):
@@ -40,6 +41,21 @@ class NecLightOn(NecCinemaEntity, BinarySensorEntity):
     def is_on(self) -> bool:
         """Return whether the light source is on."""
         return self.coordinator.data.light_on
+
+
+class NecLampLit(NecCinemaEntity, BinarySensorEntity):
+    """Whether one lamp of a dual lamp head is lit."""
+
+    def __init__(self, coordinator: NecCinemaCoordinator, lamp: int) -> None:
+        """Initialise the sensor for lamp 1 or lamp 2."""
+        super().__init__(coordinator, f"lamp{lamp}_on")
+        self._lamp = lamp
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return whether this lamp is lit."""
+        data = self.coordinator.data
+        return data.lamp1_on if self._lamp == 1 else data.lamp2_on
 
 
 class NecProblem(NecCinemaEntity, BinarySensorEntity):

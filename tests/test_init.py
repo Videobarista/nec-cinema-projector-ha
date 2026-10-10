@@ -236,3 +236,56 @@ async def test_lamp_mode_with_lamp_lit(
         )
     assert err.value.translation_key == "lamp_mode_lamp_on"
     dual_projector.set_lamp_mode.assert_not_awaited()
+
+
+async def test_dual_lamp_entities(
+    hass: HomeAssistant,
+    dual_projector: FakeDualLampProjector,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A dual lamp head reports which lamp is lit and the switching lockout."""
+    dual_projector.lockout = 42
+    await _setup(hass, mock_config_entry)
+    assert _state(hass, "binary_sensor", "lamp1_on") == STATE_ON
+    assert _state(hass, "binary_sensor", "lamp2_on") == STATE_ON
+    assert _state(hass, "sensor", "lamp_lockout") == "42"
+    assert _state(hass, "select", "lamp_mode") == "dual"
+
+
+async def test_light_off_during_lockout(
+    hass: HomeAssistant,
+    dual_projector: FakeDualLampProjector,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """A light command refused during the lockout says how long is left."""
+    await _setup(hass, mock_config_entry)
+    dual_projector.lockout = 37
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "switch",
+            "turn_off",
+            {"entity_id": _entity_id(hass, "switch", "light")},
+            blocking=True,
+        )
+    assert err.value.translation_key == "lamp_lockout"
+    assert err.value.translation_placeholders == {"seconds": "37"}
+    assert dual_projector.mode == 0x01
+
+
+async def test_cooling_bar_after_light_off(
+    hass: HomeAssistant,
+    dual_projector: FakeDualLampProjector,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """On a dual lamp head the bar follows the lockout once the lamp is out."""
+    await _setup(hass, mock_config_entry)
+    coordinator = mock_config_entry.runtime_data
+    dual_projector.status, dual_projector.light, dual_projector.lockout = 0x0C, False, 80
+    await coordinator.async_refresh()
+    assert coordinator.data.cooling_progress == 100
+    dual_projector.lockout = 20
+    await coordinator.async_refresh()
+    assert coordinator.data.cooling_progress == 25
+    dual_projector.lockout = 0
+    await coordinator.async_refresh()
+    assert coordinator.data.cooling_progress == 0

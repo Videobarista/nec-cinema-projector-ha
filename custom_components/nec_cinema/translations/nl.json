@@ -59,6 +59,12 @@
       },
       "connectivity": {
         "name": "Besturingspoort"
+      },
+      "lamp1_on": {
+        "name": "Lamp 1 brandt"
+      },
+      "lamp2_on": {
+        "name": "Lamp 2 brandt"
       }
     },
     "cover": {
@@ -164,6 +170,9 @@
       },
       "cooling_progress": {
         "name": "Koelvoortgang"
+      },
+      "lamp_lockout": {
+        "name": "Lampblokkade"
       }
     },
     "button": {
@@ -261,6 +270,9 @@
     },
     "lamp_mode_lamp_on": {
       "message": "De lampmodus kan alleen gewijzigd worden als de lamp uit is. Zet de lichtbron uit, wacht tot hij is afgekoeld en probeer het opnieuw."
+    },
+    "lamp_lockout": {
+      "message": "De projector staat het schakelen van de lamp nog niet toe: nog {seconds} s. Na het ontsteken moet de lamp even blijven branden, en na het doven eerst afkoelen."
     }
   }
 }

@@ -10,7 +10,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import NecError, NecLockedError, NecNakError
+from .client import NecError, NecLampLockoutError, NecLockedError, NecNakError
 from .const import DOMAIN, TRANSIENT_NAK_CODES
 from .coordinator import NecCinemaCoordinator
 
@@ -52,6 +52,12 @@ class NecCinemaEntity(CoordinatorEntity[NecCinemaCoordinator]):
         """
         try:
             await call(*args)
+        except NecLampLockoutError as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="lamp_lockout",
+                translation_placeholders={"seconds": str(err.seconds)},
+            ) from err
         except NecLockedError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,

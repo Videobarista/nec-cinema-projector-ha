@@ -174,8 +174,11 @@ class FakeProjector:
             "power_processing": False,
             "process_status": self.status,
             "light_on": self.light,
+            "lamps": 0x01 if self.light else 0x00,
             "light_processing": False,
+            "lamp_mode": 0x00,
             "cooling_remaining": 0,
+            "lockout_remaining": 0,
         }
 
     async def light_mode(self) -> int:
@@ -210,18 +213,38 @@ class FakeProjector:
 
 
 class FakeDualLampProjector(FakeProjector):
-    """An NC900C-A: two lamps, a lamp mode, lamp output in percent."""
+    """An NC900C-A: two lamps, a lamp mode, lamp output in percent.
+
+    ``lockout`` is the switching lockout the head reports after striking and
+    after putting the lamp out; light commands are refused while it runs.
+    """
 
     def __init__(self) -> None:
         """Start running on both lamps."""
         super().__init__()
         self.projector_type = (0x0C, 0x0C, 0x0A)
         self.lamp = 0x00
+        self.lockout = 0
 
     async def lamp_mode(self) -> int:
         """LAMP MODE REQUEST."""
         self._check()
         return self.lamp
+
+    async def running_status(self) -> dict[str, Any]:
+        """RUNNING STATUS REQUEST with the dual lamp fields."""
+        status = await super().running_status()
+        status["lamps"] = 0x03 if self.light else 0x00
+        status["lamp_mode"] = self.lamp
+        status["lockout_remaining"] = self.lockout
+        return status
+
+    async def set_light_mode(self, mode: int) -> None:
+        """LAMP CONTROL MODE SET, refused during the switching lockout."""
+        self._check()
+        if self.lockout:
+            raise NecNakError("setting not possible right now", (0x02, 0x03))
+        self.mode = mode
 
     async def light_power(self) -> float:
         """LAMP PARAMETER OUTPUT REQUEST 2: setting power in percent."""

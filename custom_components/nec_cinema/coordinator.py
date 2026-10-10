@@ -19,6 +19,7 @@ from .client import (
     NecClient,
     NecConnectionError,
     NecError,
+    NecLampLockoutError,
     NecLockedError,
     NecNakError,
     NecProjector,
@@ -103,6 +104,9 @@ class ProjectorData:
     cooling: bool = False
     cooling_remaining: int | None = None
     cooling_progress: int | None = None
+    lockout_remaining: int | None = None
+    lamp1_on: bool | None = None
+    lamp2_on: bool | None = None
     external_control: bool = False
 
     douser_closed: bool | None = None
@@ -420,13 +424,24 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         time, so a bar card empties from 100 to 0 without being told how long
         the projector takes to cool.
 
+        A head counts its cooling time down as soon as it starts shutting down,
+        a poll or so before it reports the cooling status, so a running timer
+        with the lamp out counts as cooling too. The dual lamp heads have no
+        cooling status at all when the lamp is put out with the power on; their
+        switching lockout is that cool-down and is shown instead.
+
         The full time is the longest reading of the phase. When Home Assistant
         joins a phase already under way, for instance after a restart, its
         first reading is too short to be the full time, so the full time of the
         last phase watched from the start is used instead. That is remembered
         across restarts.
         """
-        if data.process_status != "cooling":
+        timer = remaining if 0 < remaining <= MAX_COOLING_TIME else 0
+        if not timer and not data.light_on and data.lockout_remaining:
+            timer = data.lockout_remaining
+        cooling = data.process_status == "cooling" or (timer > 0 and not data.light_on)
+
+        if not cooling:
             if (
                 self._cooling_watched
                 and self._cooling_total
@@ -445,18 +460,13 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         if not self._cooling_phase:
             previous = self.data
             self._cooling_phase = True
-            self._cooling_watched = (
-                previous is not None
-                and previous.available
-                and previous.process_status != "cooling"
-            )
+            self._cooling_watched = previous is not None and previous.available
             self._cooling_total = 0 if self._cooling_watched else self._cooling_learned
 
-        if remaining <= MAX_COOLING_TIME:
-            self._cooling_total = max(self._cooling_total, remaining)
-        data.cooling_remaining = remaining
+        self._cooling_total = max(self._cooling_total, timer)
+        data.cooling_remaining = timer
         data.cooling_progress = (
-            min(100, round(remaining * 100 / self._cooling_total)) if self._cooling_total else 100
+            min(100, round(timer * 100 / self._cooling_total)) if self._cooling_total else 100
         )
 
     async def async_set_start_dark(self, enabled: bool) -> None:
@@ -697,6 +707,15 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         )
         data.power_processing = running["power_processing"]
         data.cooling = running["cooling"]
+        if self.lamp_details:
+            # Dual lamp heads: which lamp is lit, the lamp mode and the
+            # switching lockout all come with the status, no extra requests.
+            lockout = running["lockout_remaining"]
+            data.lockout_remaining = lockout if lockout <= MAX_COOLING_TIME else 0
+            data.lamp1_on = bool(running["lamps"] & 0x01)
+            data.lamp2_on = bool(running["lamps"] & 0x02)
+        if self.has_lamp_mode:
+            data.lamp_mode = LAMP_MODES.get(running["lamp_mode"], LAMP_MODE_UNKNOWN)
         self._track_cooling(data, running["cooling_remaining"])
         data.external_control = running["external_control"]
 
@@ -706,16 +725,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             )
         except NecNakError as err:
             _LOGGER.debug("lamp control mode refused: %s", err)
-
-        if self.has_lamp_mode:
-            # Read every poll: one short request, and a change made here or in
-            # Communicator should show straight away, not a minute later.
-            try:
-                data.lamp_mode = LAMP_MODES.get(
-                    await self.projector.lamp_mode(), LAMP_MODE_UNKNOWN
-                )
-            except NecNakError as err:
-                _LOGGER.debug("lamp mode refused: %s", err)
 
         if self.lamp_output_kind == "watt":
             try:
@@ -885,6 +894,17 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         data.douser_closed = mute["douser_closed"]
         data.picture_mute = mute["picture_mute"]
 
+    async def _current_lockout(self) -> int:
+        """Return the seconds left of a dual lamp head's switching lockout."""
+        if not self.lamp_details:
+            return 0
+        try:
+            lockout = (await self.projector.running_status())["lockout_remaining"]
+        except NecError as err:
+            _LOGGER.debug("could not read the lamp lockout: %s", err)
+            return 0
+        return lockout if 0 < lockout <= MAX_COOLING_TIME else 0
+
     async def async_send(self, action: str, *args: Any) -> None:
         """Run a projector command and refresh straight away.
 
@@ -901,6 +921,15 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 if err.code not in TRANSIENT_NAK_CODES:
                     self._record_error(action, "refused", err)
                     raise
+                # Dual lamp heads refuse lamp commands for about 90 seconds after
+                # striking and after putting the lamp out. Say how long is left.
+                lockout = await self._current_lockout()
+                if lockout:
+                    blocked = NecLampLockoutError(
+                        f"lamp switching locked for another {lockout} s", err.code, lockout
+                    )
+                    self._record_error(action, "busy", blocked)
+                    raise blocked from err
                 # While the head is running the same code means manual control
                 # is locked out, not that it is busy. Waiting will not help.
                 if self.running:

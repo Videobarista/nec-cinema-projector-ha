@@ -59,6 +59,12 @@
       },
       "connectivity": {
         "name": "Control port"
+      },
+      "lamp1_on": {
+        "name": "Lamp 1 lit"
+      },
+      "lamp2_on": {
+        "name": "Lamp 2 lit"
       }
     },
     "cover": {
@@ -164,6 +170,9 @@
       },
       "cooling_progress": {
         "name": "Cooling progress"
+      },
+      "lamp_lockout": {
+        "name": "Lamp switching lockout"
       }
     },
     "button": {
@@ -261,6 +270,9 @@
     },
     "lamp_mode_lamp_on": {
       "message": "The lamp mode can only be changed while the lamp is off. Switch the light source off, wait until it has cooled down, and try again."
+    },
+    "lamp_lockout": {
+      "message": "The projector does not allow switching the lamp yet: {seconds} s to go. After striking the lamp has to stay lit for a while, and after putting it out it has to cool down first."
     }
   }
 }

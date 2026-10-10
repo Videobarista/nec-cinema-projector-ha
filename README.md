@@ -45,12 +45,14 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Lamp power / current / voltage | `sensor` | Measured by the lamp power supply (NC3240S-A, NC3200S, NC2000C, NC1200C) |
 | Cooling remaining | `sensor` | Seconds of cooling left, zero outside the cooling phase |
 | Cooling progress | `sensor` | Cooling time left in percent, 100 down to 0, for bar and gauge cards |
+| Lamp switching lockout | `sensor` | Seconds before the lamp may be switched again, on dual lamp heads (see below) |
 | Current title | `sensor` | Title name, with title and preset number as attributes |
 | Active errors | `sensor` | Error count, with the decoded messages as an attribute |
 | Last seen | `sensor` | Timestamp of the last successful poll |
 | Last command | `sensor` | How the most recent command went, with the projector's own wording, the status it was in and the raw NAK code as attributes |
 | Temperatures | `sensor` | One per thermal sensor, discovered from the projector |
 | Light source | `binary_sensor` | Whether the lamp or laser is actually lit |
+| Lamp 1 lit / Lamp 2 lit | `binary_sensor` | Which lamp is lit, on dual lamp heads |
 | Projector error | `binary_sensor` | Problem class, with the messages as an attribute |
 | Test pattern | `binary_sensor` | Whether a test pattern is on screen |
 | Media block selected | `binary_sensor` | Whether the IMB/IMS port is the active input |
@@ -170,6 +172,20 @@ during a power-up, from the Light source switch or the touch panel, is left
 alone, and so is a running projector that is sent another turn on. Once the
 projector is running the lamp is left entirely to the Light source switch, and
 using that switch takes over from Start dark until the next shutdown.
+
+## Dual lamp heads
+
+The NC900C-A and the NC1000C family run on two lamps, and treat them carefully:
+
+- After striking, the lamp has to stay lit for about 90 seconds. After putting it out, it cannot be
+  struck again or moved to another lamp mode for about as long. The projector refuses lamp commands
+  meanwhile. **Lamp switching lockout** counts those seconds down, and a refused command says how
+  long is left instead of just failing.
+- The lamp mode (both lamps, lamp 1 only, lamp 2 only) can only be changed while the lamp is out
+  and the lockout has run out.
+- Putting the lamp out with the power on does not put these heads in a cooling state. **Cooling
+  progress** follows the lockout instead, so a bar card shows the lamp cooling down here too. After
+  powering off, these heads cool for about a minute, against about five on single lamp heads.
 
 ## Seeing why a command was refused
 

@@ -42,6 +42,20 @@ class NecNakError(NecError):
         self.code = code
 
 
+class NecLampLockoutError(NecNakError):
+    """The projector refused because the lamp may not be switched yet.
+
+    Dual lamp heads keep the lamp lit for about 90 seconds after striking and
+    dark for about as long after putting it out, and refuse lamp commands
+    meanwhile with 02H 03H.
+    """
+
+    def __init__(self, text: str, code: tuple[int, int] | None, seconds: int) -> None:
+        """Store the seconds still to go."""
+        super().__init__(text, code)
+        self.seconds = seconds
+
+
 class NecLockedError(NecNakError):
     """The projector refused because manual control is locked out.
 
@@ -276,7 +290,14 @@ class NecProjector:
     # ---------------------------------------------------------------- polling
 
     async def running_status(self) -> dict[str, Any]:
-        """RUNNING STATUS REQUEST (078-2.)."""
+        """RUNNING STATUS REQUEST (078-2.).
+
+        On the dual lamp heads (NC900C-A, NC1000C family) DATA10 tells which
+        lamps are lit (bit 0 lamp 1, bit 1 lamp 2), DATA12 holds the lamp mode
+        and DATA15-16 the seconds during which the lamp may not be switched
+        off or on again: about 90 s after striking and after extinguishing.
+        On other heads those fields are reserved.
+        """
         data = (await self.client.request(0x00, 0x85, bytes((0x01,)))).data
         if len(data) < 16:
             raise NecError("short running status response")
@@ -287,8 +308,11 @@ class NecProjector:
             "power_processing": data[4] == 0x01,
             "process_status": data[5],
             "light_on": data[9] != 0x00,
+            "lamps": data[9],
             "light_processing": data[10] == 0x01,
+            "lamp_mode": data[11],
             "cooling_remaining": u16le(data, 12),
+            "lockout_remaining": u16le(data, 14),
         }
 
     async def mute_status(self) -> dict[str, Any]:

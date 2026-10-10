@@ -40,7 +40,7 @@ async def async_setup_entry(
     if coordinator.light_hours_detailed:
         entities.append(NecLampStrikes(coordinator))
     if coordinator.lamp_details:
-        entities.append(NecLampRemaining(coordinator))
+        entities.extend([NecLampRemaining(coordinator), NecLampLockout(coordinator)])
     if coordinator.has_lamp2:
         entities.extend([NecLamp2Hours(coordinator), NecLamp2Remaining(coordinator)])
     if coordinator.lamp_output_kind == "percent":
@@ -241,6 +241,28 @@ class NecLampVolt(NecCinemaEntity, SensorEntity):
     def native_value(self) -> float | None:
         """Return the measured lamp voltage."""
         return self.coordinator.data.lamp_volt
+
+
+class NecLampLockout(NecCinemaEntity, SensorEntity):
+    """Seconds before the lamp may be switched again, on dual lamp heads.
+
+    For about 90 seconds after striking the lamp cannot be put out, and for
+    about as long after putting it out it cannot be struck again or moved to
+    another lamp mode. Commands sent meanwhile are refused by the projector.
+    """
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.SECONDS
+    _attr_suggested_display_precision = 0
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "lamp_lockout")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the seconds left of the switching lockout."""
+        return self.coordinator.data.lockout_remaining
 
 
 class NecCoolingRemaining(NecCinemaEntity, SensorEntity):
