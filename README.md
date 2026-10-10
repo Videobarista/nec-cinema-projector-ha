@@ -30,7 +30,7 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Projector | `media_player` | On/off, input port selection, current title |
 | Light source | `switch` | Light the lamp or laser without cycling projector power |
 | Start dark | `switch` | Power the projector up without lighting the lamp |
-| Lamp mode | `select` | Both lamps, lamp 1 only or lamp 2 only, on dual lamp heads |
+| Lamp mode | `select` | Both lamps, lamp 1 only or lamp 2 only, on dual lamp heads; changeable while the lamp is off |
 | Douser | `cover` (shutter) | Open and close the mechanical douser |
 | Douser open | `switch` | The same douser as a plain switch (disabled by default) |
 | Picture mute | `switch` | Electronic blanking, douser stays put |

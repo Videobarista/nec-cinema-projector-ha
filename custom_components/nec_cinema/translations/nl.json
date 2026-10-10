@@ -258,6 +258,9 @@
     },
     "command_failed": {
       "message": "Kan de projector niet bereiken: {reason}"
+    },
+    "lamp_mode_lamp_on": {
+      "message": "De lampmodus kan alleen gewijzigd worden als de lamp uit is. Zet de lichtbron uit, wacht tot hij is afgekoeld en probeer het opnieuw."
     }
   }
 }

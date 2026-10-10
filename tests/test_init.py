@@ -11,9 +11,10 @@ from custom_components.nec_cinema.const import DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
-from .conftest import SERIAL, FakeProjector
+from .conftest import SERIAL, FakeDualLampProjector, FakeProjector
 
 
 def _entity_id(hass: HomeAssistant, platform: str, key: str) -> str:
@@ -199,3 +200,39 @@ async def test_light_source_switch(
         blocking=True,
     )
     assert projector.mode == (0x01 if light else 0x02)
+
+
+async def test_lamp_mode_with_lamp_off(
+    hass: HomeAssistant,
+    dual_projector: FakeDualLampProjector,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """With the lamp off the lamp mode is sent to the projector."""
+    dual_projector.status = 0x0C
+    dual_projector.light = False
+    await _setup(hass, mock_config_entry)
+    lamp_mode = _entity_id(hass, "select", "lamp_mode")
+    assert hass.states.get(lamp_mode).state == "dual"
+
+    await hass.services.async_call(
+        "select", "select_option", {"entity_id": lamp_mode, "option": "lamp2"}, blocking=True
+    )
+    dual_projector.set_lamp_mode.assert_awaited_once_with(0x02)
+
+
+async def test_lamp_mode_with_lamp_lit(
+    hass: HomeAssistant,
+    dual_projector: FakeDualLampProjector,
+    mock_config_entry: MockConfigEntry,
+) -> None:
+    """With a lamp lit the change is refused before asking the projector."""
+    await _setup(hass, mock_config_entry)
+    with pytest.raises(HomeAssistantError) as err:
+        await hass.services.async_call(
+            "select",
+            "select_option",
+            {"entity_id": _entity_id(hass, "select", "lamp_mode"), "option": "lamp1"},
+            blocking=True,
+        )
+    assert err.value.translation_key == "lamp_mode_lamp_on"
+    dual_projector.set_lamp_mode.assert_not_awaited()

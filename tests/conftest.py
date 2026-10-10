@@ -209,6 +209,26 @@ class FakeProjector:
         return {"title_number": 10, "preset_number": 1, "title_name": "2D Flat"}
 
 
+class FakeDualLampProjector(FakeProjector):
+    """An NC900C-A: two lamps, a lamp mode, lamp output in percent."""
+
+    def __init__(self) -> None:
+        """Start running on both lamps."""
+        super().__init__()
+        self.projector_type = (0x0C, 0x0C, 0x0A)
+        self.lamp = 0x00
+
+    async def lamp_mode(self) -> int:
+        """LAMP MODE REQUEST."""
+        self._check()
+        return self.lamp
+
+    async def light_power(self) -> float:
+        """LAMP PARAMETER OUTPUT REQUEST 2: setting power in percent."""
+        self._check()
+        return 98.7
+
+
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load the integration from custom_components."""
@@ -218,6 +238,17 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
 def projector() -> Generator[FakeProjector]:
     """Patch the protocol layer everywhere it is created; return the fake head."""
     fake = FakeProjector()
+    with (
+        patch("custom_components.nec_cinema.config_flow.NecProjector", return_value=fake),
+        patch("custom_components.nec_cinema.coordinator.NecProjector", return_value=fake),
+    ):
+        yield fake
+
+
+@pytest.fixture
+def dual_projector() -> Generator[FakeDualLampProjector]:
+    """Like ``projector``, for a dual lamp head."""
+    fake = FakeDualLampProjector()
     with (
         patch("custom_components.nec_cinema.config_flow.NecProjector", return_value=fake),
         patch("custom_components.nec_cinema.coordinator.NecProjector", return_value=fake),
