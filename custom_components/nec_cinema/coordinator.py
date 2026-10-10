@@ -683,7 +683,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             data.lamp2_remaining = previous.lamp2_remaining
             data.lamp2_strikes = previous.lamp2_strikes
             data.light_power = previous.light_power
-            data.lamp_mode = previous.lamp_mode
             data.temperatures = previous.temperatures
         return data
 
@@ -707,6 +706,16 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             )
         except NecNakError as err:
             _LOGGER.debug("lamp control mode refused: %s", err)
+
+        if self.has_lamp_mode:
+            # Read every poll: one short request, and a change made here or in
+            # Communicator should show straight away, not a minute later.
+            try:
+                data.lamp_mode = LAMP_MODES.get(
+                    await self.projector.lamp_mode(), LAMP_MODE_UNKNOWN
+                )
+            except NecNakError as err:
+                _LOGGER.debug("lamp mode refused: %s", err)
 
         if self.lamp_output_kind == "watt":
             try:
@@ -762,14 +771,6 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 data.light_power = await self.projector.light_power()
         except (NecError, NecNakError) as err:
             _LOGGER.debug("lamp parameter failed: %s", err)
-
-        if self.has_lamp_mode:
-            try:
-                data.lamp_mode = LAMP_MODES.get(
-                    await self.projector.lamp_mode(), LAMP_MODE_UNKNOWN
-                )
-            except (NecError, NecNakError) as err:
-                _LOGGER.debug("lamp mode failed: %s", err)
 
         try:
             data.errors = await self._read_errors()

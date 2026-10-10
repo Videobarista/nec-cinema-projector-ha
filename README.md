@@ -229,7 +229,10 @@ document, so the right ones are used without guessing:
 - model name: taken from the projector type in `SETTING REQUEST` (078-1), since several heads
   answer the model name request with a family label such as "NC-Series";
 - temperatures: `PARTS COUNT` / `COMMON CURRENT STATUS` (305-1, 300-20) on newer heads, falling back
-  to `TEMPERATURE STATUS REQUEST 3` (078-204) on older ones.
+  to `TEMPERATURE STATUS REQUEST 3` (078-204) on older ones;
+- lamp mode on dual lamp heads: `LAMP MODE SET` (098-246) is sent as `03H B1H`, like every other
+  setting command. Rev. 15.0 prints it as `03H B0H`, but that is the request: a head sent that only
+  reports its current mode and changes nothing.
 
 ## Known limitations
 

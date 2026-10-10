@@ -111,17 +111,11 @@ class NecClient:
         id1: int,
         id2: int,
         data: bytes = b"",
-        accept_id2: tuple[int, ...] | None = None,
     ) -> Response:
-        """Send a command and return the matching response.
-
-        ``accept_id2`` covers the commands that answer under a different ID2
-        than they were sent with; LAMP MODE SET is sent as B0H and answered as
-        B1H.
-        """
+        """Send a command and return the matching response."""
         async with self._lock:
             try:
-                return await self._request(id1, id2, data, accept_id2)
+                return await self._request(id1, id2, data)
             except NecNakError:
                 raise
             except NecError:
@@ -134,7 +128,6 @@ class NecClient:
         id1: int,
         id2: int,
         data: bytes,
-        accept_id2: tuple[int, ...] | None = None,
     ) -> Response:
         await self._connect()
         reader, writer = self._reader, self._writer
@@ -149,10 +142,9 @@ class NecClient:
             raise NecConnectionError(f"send failed: {self._reason(err)}") from err
 
         # Skip any stale frame that does not belong to this request.
-        expected = accept_id2 or (id2 & 0xFF,)
         for _ in range(4):
             response = await self._read_frame(reader)
-            if response.id2 in expected and (response.id1 & ACK_BIT):
+            if response.id2 == id2 & 0xFF and (response.id1 & ACK_BIT):
                 if response.is_nak:
                     raise NecNakError(response.error_text, response.error_code)
                 return response
@@ -423,17 +415,19 @@ class NecProjector:
     async def set_lamp_mode(self, mode: int) -> None:
         """LAMP MODE SET (098-246.).
 
-        The command goes out as B0H and the projector answers as B1H, so both
-        are accepted.
+        Rev 15.0 of the document prints the command as 03H B0H, but that is the
+        request (097-246): a head sent B0H with a mode only reports its current
+        mode and changes nothing. Like every other 098 setting command it is
+        03H B1H, which is also how the document prints the response.
         """
-        response = await self.client.request(
-            0x03, 0xB0, bytes((0xD8, mode)), accept_id2=(0xB0, 0xB1)
-        )
-        result = response.data[1] if len(response.data) >= 2 else 0x00
+        response = await self.client.request(0x03, 0xB1, bytes((0xD8, mode)))
+        if len(response.data) < 2:
+            raise NecError("short lamp mode response")
+        result = response.data[1]
         if result == 0x02:
             raise NecNakError("the projector cannot change the lamp mode right now", None)
         if result != 0x00:
-            raise NecNakError("the projector could not change the lamp mode", None)
+            raise NecNakError("the projector reported an error changing the lamp mode", None)
 
     async def light_mode(self) -> int:
         """LAMP CONTROL MODE REQUEST (235-18.)."""
