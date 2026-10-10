@@ -9,12 +9,19 @@
           "port": "Port",
           "name": "Name",
           "projector_id": "Projector ID"
+        },
+        "data_description": {
+          "host": "IP address of the projector head on the control network.",
+          "port": "TCP port of the cinema control protocol. Only change it if the projector was set to another port.",
+          "name": "Name for the device in Home Assistant. Left at the default, the model name is used.",
+          "projector_id": "Projector ID set on the head. Leave at 0 unless several projectors share one control line."
         }
       }
     },
     "error": {
       "cannot_connect": "No answer on the control port. Check the IP address and whether external control is enabled on the projector.",
-      "refused": "The projector answered but refused the command."
+      "refused": "The projector answered but refused the command.",
+      "unknown": "Unexpected error. Check the Home Assistant log for details."
     },
     "abort": {
       "already_configured": "This projector is already configured."
@@ -28,6 +35,10 @@
         "data": {
           "scan_interval": "Polling interval (seconds)",
           "macros": "Preset (macro) keys"
+        },
+        "data_description": {
+          "scan_interval": "How often the projector is polled. Lamp hours, temperatures and errors are read every sixth poll.",
+          "macros": "Optional. Overrides or pre-fills the learned preset names, for example: 1: Flat, 2: Scope."
         }
       }
     }

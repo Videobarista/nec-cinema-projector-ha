@@ -5,23 +5,21 @@ from __future__ import annotations
 from typing import Any
 
 from homeassistant.components.switch import SwitchDeviceClass, SwitchEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import NecCinemaCoordinator
+from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: NecCinemaConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the switches."""
-    coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     async_add_entities(
         [
             NecLightSwitch(coordinator),

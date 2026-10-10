@@ -1,10 +1,12 @@
 # Sharp NEC Cinema Projector for Home Assistant
 
 [![Release](https://img.shields.io/github/v/release/Videobarista/nec-cinema-projector-ha)](https://github.com/Videobarista/nec-cinema-projector-ha/releases)
-[![Ruff](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/ruff.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/ruff.yml)
-[![hassfest](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hassfest.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hassfest.yml)
-[![HACS](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hacs.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hacs.yml)
-[![CodeQL](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/codeql.yml/badge.svg)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/codeql.yml)
+[![Ruff](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/ruff.yml/badge.svg?branch=main)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/ruff.yml)
+[![hassfest](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hassfest.yml/badge.svg?branch=main)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hassfest.yml)
+[![HACS](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hacs.yml/badge.svg?branch=main)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/hacs.yml)
+[![CodeQL](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/codeql.yml)
+[![Tests](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/Videobarista/nec-cinema-projector-ha/actions/workflows/tests.yml)
+[![Quality scale: Bronze (aligned)](https://img.shields.io/badge/quality%20scale-bronze%20(aligned)-cd7f32.svg)](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Videobarista&repository=nec-cinema-projector-ha&category=integration)
@@ -54,6 +56,12 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 Lamp status is read from the projector, never assumed. If the head is unreachable the media player
 reports **off**, the control port sensor goes off, and the other entities go unavailable.
 
+A projector switched off at the mains does not block Home Assistant either. The integration
+remembers what the projector reported the last time it answered: model, serial number, inputs,
+lamp and temperature sensors. After a restart it sets the projector up from that, shows it as off,
+and connects by itself as soon as the projector answers. Only a projector that has never answered
+since version 1.12.0 has to be reachable once before it can be set up.
+
 For a cooling bar, use **Cooling progress** rather than **Cooling remaining**. Gauge and bar cards
 default to a maximum of 100, so a five minute cool-down in seconds would sit at full until the last
 100 seconds. The percentage needs no maximum set, and still shows the right share after a Home
@@ -88,6 +96,24 @@ data:
 
 In the integration options you can set the polling interval and, if you want, pre-fill or override
 macro names — see below.
+
+### Manual
+
+Copy `custom_components/nec_cinema` to the `custom_components` folder of your Home Assistant
+configuration, restart Home Assistant and continue with step 3 above.
+
+The integration needs Home Assistant 2025.10 or newer.
+
+## Removal
+
+1. Go to **Settings → Devices & services** and open **Sharp NEC Cinema Projector**.
+2. Open the menu (three dots) next to the projector and choose **Delete**.
+3. To remove the files as well: in HACS, open **Sharp NEC Cinema Projector** and choose
+   **Remove**, or delete `custom_components/nec_cinema` for a manual installation. Restart Home
+   Assistant afterwards.
+
+Nothing is changed on the projector itself. A light control mode the integration set (for Start
+dark) is cleared by the projector the next time it enters standby.
 
 ## Macro names are learned, not configured
 
@@ -219,6 +245,31 @@ document, so the right ones are used without guessing:
   reported as such instead of suggesting you wait.
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
+
+## Quality scale
+
+This integration is aligned with the **Bronze** tier of the
+[Home Assistant integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/).
+Home Assistant only grades integrations that ship with Home Assistant itself, so this is a
+self-assessment, not an official rating. The status per rule is recorded in
+[`quality_scale.yaml`](custom_components/nec_cinema/quality_scale.yaml).
+
+One rule is deliberately not followed: *test-before-setup* asks an integration to hold back its
+setup while the device does not answer. A cinema projector switched off at the mains is a normal
+state, so a projector that answered before is set up from what it reported then and shown as off
+instead (see [What you get](#what-you-get)).
+
+## Development
+
+The tests use [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component)
+and run on every push. To run them locally (Python 3.14):
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements_test.txt
+pytest
+```
 
 ## Brand images
 

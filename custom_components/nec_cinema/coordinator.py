@@ -15,7 +15,14 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
 
-from .client import NecClient, NecError, NecLockedError, NecNakError, NecProjector
+from .client import (
+    NecClient,
+    NecConnectionError,
+    NecError,
+    NecLockedError,
+    NecNakError,
+    NecProjector,
+)
 from .const import (
     COMMAND_ATTEMPTS,
     COMMAND_RETRY_DELAY,
@@ -48,6 +55,28 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+type NecCinemaConfigEntry = ConfigEntry[NecCinemaCoordinator]
+
+
+def resolve_model(
+    projector_type: tuple[int, int, int] | None, subtype: int | None, reported: str
+) -> str | None:
+    """Return the most specific model name available.
+
+    Some heads answer MODEL NAME REQUEST with a family label such as
+    "NC-Series", so prefer the projector type from SETTING REQUEST and fall
+    back to whatever the head called itself.
+    """
+    if projector_type is not None:
+        variants = MODEL_VARIANTS.get(projector_type, {})
+        if subtype is not None and subtype in variants:
+            return variants[subtype]
+        known = MODEL_TYPES.get(projector_type)
+        if known:
+            return known
+    return reported or None
+
 
 MAX_ERROR_STRINGS = 6
 
@@ -114,6 +143,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=f"{DOMAIN} {entry.data[CONF_HOST]}",
             update_interval=timedelta(seconds=scan_interval),
         )
@@ -147,23 +177,64 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._cooling_total = 0
         self._cooling_learned = 0
         self._poll_count = 0
-        self._first_poll_done = False
+        self._device: dict[str, Any] | None = None
+        self._needs_probe = False
+        self._reachable: bool | None = None
+        self._skip_poll = False
 
     # ------------------------------------------------------------------ setup
 
     async def async_probe(self) -> None:
-        """Read the static information once, at config entry setup."""
+        """Learn what this projector is and can do, at config entry setup.
+
+        The answers are remembered. When the projector cannot be reached, for
+        instance because it is switched off at the mains, the entry is set up
+        from what it reported last time and the projector shows as off; it is
+        asked again as soon as it answers. Only a projector that has never
+        answered since this was introduced has to be reachable to set up.
+        """
         await self._load_learned()
+        try:
+            await self._probe_live()
+        except NecConnectionError as err:
+            if self._device is None:
+                raise
+            _LOGGER.info(
+                "%s is not reachable (%s); setting it up from what it reported last time",
+                self.entry.title,
+                err,
+            )
+            self._apply_device(self._device)
+            self._needs_probe = True
+            # The first refresh follows straight away; asking again would only
+            # sit out the same timeout and slow down Home Assistant's start.
+            self._skip_poll = True
+            self._reachable = False
+        else:
+            self._device = self._device_info()
+            self._save()
+
+    async def _probe_live(self) -> None:
+        """Ask the projector for its identity and capabilities.
+
+        A lost connection aborts the whole probe, so a half answered probe is
+        never taken for a projector with fewer features.
+        """
+        self._reset_device()
         reported = await self.projector.model_name()
 
         try:
             self.serial = await self.projector.serial_number()
-        except (NecError, NecNakError) as err:
+        except NecConnectionError:
+            raise
+        except NecError as err:
             _LOGGER.debug("serial number unavailable: %s", err)
 
         try:
             self.projector_type, self.model_subtype = await self.projector.projector_info()
-        except (NecError, NecNakError) as err:
+        except NecConnectionError:
+            raise
+        except NecError as err:
             _LOGGER.debug("projector type unavailable: %s", err)
 
         self.model = self._resolve_model(reported)
@@ -172,21 +243,115 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self.lamp_details = self.projector_type in LAMP_DETAIL_TYPES
         try:
             await self.projector.lamp_mode()
-        except (NecError, NecNakError) as err:
+        except NecConnectionError:
+            raise
+        except NecError as err:
             _LOGGER.debug("no lamp mode support: %s", err)
         else:
             self.has_lamp_mode = True
         if self.lamp_details:
             try:
                 self.has_lamp2 = bool((await self.projector.lamp_info_modern()).get("lamp2_hours"))
-            except (NecError, NecNakError) as err:
+            except NecConnectionError:
+                raise
+            except NecError as err:
                 _LOGGER.debug("lamp detail probe failed: %s", err)
         await self._probe_lamp_output()
         await self._probe_sources()
         await self._probe_thermal_sensors()
 
+    def _reset_device(self) -> None:
+        """Forget what a probe finds, so a new probe starts clean."""
+        self.model = "Cinema projector"
+        self.serial = None
+        self.projector_type = None
+        self.model_subtype = None
+        self._legacy_lamp = False
+        self._legacy_temps = False
+        self.lamp_output_kind = None
+        self.lamp_details = False
+        self.has_lamp2 = False
+        self.has_lamp_mode = False
+        self.source_map = {}
+        self.thermal_names = []
+
+    def _device_info(self) -> dict[str, Any]:
+        """Return what the last probe found, in a form that can be stored."""
+        return {
+            "model": self.model,
+            "serial": self.serial,
+            "projector_type": list(self.projector_type) if self.projector_type else None,
+            "model_subtype": self.model_subtype,
+            "legacy_lamp": self._legacy_lamp,
+            "legacy_temps": self._legacy_temps,
+            "lamp_output_kind": self.lamp_output_kind,
+            "lamp_details": self.lamp_details,
+            "has_lamp2": self.has_lamp2,
+            "has_lamp_mode": self.has_lamp_mode,
+            "sources": dict(self.source_map),
+            "thermal_names": list(self.thermal_names),
+        }
+
+    def _apply_device(self, device: dict[str, Any]) -> None:
+        """Take over what an earlier probe found."""
+        self._reset_device()
+        self.model = str(device.get("model") or self.model)
+        self.serial = device.get("serial") or None
+        kind = device.get("projector_type")
+        self.projector_type = (kind[0], kind[1], kind[2]) if kind else None
+        self.model_subtype = device.get("model_subtype")
+        self._legacy_lamp = bool(device.get("legacy_lamp"))
+        self._legacy_temps = bool(device.get("legacy_temps"))
+        self.lamp_output_kind = device.get("lamp_output_kind")
+        self.lamp_details = bool(device.get("lamp_details"))
+        self.has_lamp2 = bool(device.get("has_lamp2"))
+        self.has_lamp_mode = bool(device.get("has_lamp_mode"))
+        self.source_map = {str(name): int(code) for name, code in device["sources"].items()}
+        self.thermal_names = [str(name) for name in device["thermal_names"]]
+
+    @staticmethod
+    def _entity_set(device: dict[str, Any]) -> tuple[Any, ...]:
+        """Return the parts of a probe that decide which entities exist."""
+        return (
+            device.get("serial"),
+            device.get("model"),
+            device.get("legacy_lamp"),
+            device.get("legacy_temps"),
+            device.get("lamp_output_kind"),
+            device.get("lamp_details"),
+            device.get("has_lamp2"),
+            device.get("has_lamp_mode"),
+            tuple(device.get("thermal_names") or ()),
+        )
+
+    async def _reprobe(self) -> None:
+        """Ask again now the projector answers, after an offline setup.
+
+        If it reports what it reported before, nothing changes. If it differs,
+        for instance because a sensor board was swapped, the entry is reloaded
+        so the entities match the projector again.
+        """
+        cached = self._device
+        try:
+            await self._probe_live()
+        except NecError as err:
+            _LOGGER.debug("probe after coming back failed, trying again later: %s", err)
+            if cached:
+                self._apply_device(cached)
+            return
+        self._needs_probe = False
+        fresh = self._device_info()
+        self._device = fresh
+        self._save()
+        if cached is None or self._entity_set(fresh) != self._entity_set(cached):
+            _LOGGER.info(
+                "%s reports other capabilities than last time; reloading it",
+                self.entry.title,
+            )
+            self.hass.config_entries.async_schedule_reload(self.entry.entry_id)
+
     async def _load_learned(self) -> None:
-        """Read the macro names learned in earlier sessions."""
+        """Read what was remembered in earlier sessions."""
         stored = await self._store.async_load()
         if isinstance(stored, dict):
             self._learned = {
@@ -202,6 +367,13 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             learned = stored.get("cooling_time")
             if isinstance(learned, int) and 0 < learned <= MAX_COOLING_TIME:
                 self._cooling_learned = learned
+            device = stored.get("device")
+            if (
+                isinstance(device, dict)
+                and isinstance(device.get("sources"), dict)
+                and isinstance(device.get("thermal_names"), list)
+            ):
+                self._device = device
 
     @property
     def learned_macros(self) -> dict[int, str]:
@@ -229,6 +401,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 "macros": self._learned,
                 "start_dark": self.start_dark,
                 "cooling_time": self._cooling_learned,
+                "device": self._device,
             },
             SAVE_DELAY,
         )
@@ -374,20 +547,8 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             data.light_mode = "off"
 
     def _resolve_model(self, reported: str) -> str:
-        """Return the most specific model name available.
-
-        Some heads answer MODEL NAME REQUEST with a family label such as
-        "NC-Series", so prefer the projector type from SETTING REQUEST and fall
-        back to whatever the head called itself.
-        """
-        if self.projector_type is not None:
-            variants = MODEL_VARIANTS.get(self.projector_type, {})
-            if self.model_subtype is not None and self.model_subtype in variants:
-                return variants[self.model_subtype]
-            known = MODEL_TYPES.get(self.projector_type)
-            if known:
-                return known
-        return reported or self.model
+        """Return the most specific model name available."""
+        return resolve_model(self.projector_type, self.model_subtype, reported) or self.model
 
     async def _probe_lamp_output(self) -> None:
         """Find out which lamp output command this head answers.
@@ -404,6 +565,8 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             await self.projector.light_power()
         except NecNakError:
             pass
+        except NecConnectionError:
+            raise
         except NecError as err:
             _LOGGER.debug("lamp power probe failed: %s", err)
             return
@@ -413,7 +576,9 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
 
         try:
             await self.projector.lamp_output()
-        except (NecError, NecNakError) as err:
+        except NecConnectionError:
+            raise
+        except NecError as err:
             _LOGGER.debug("no lamp output command supported: %s", err)
         else:
             self.lamp_output_kind = "watt"
@@ -423,7 +588,9 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         codes: list[int] = []
         try:
             codes = [c for c in await self.projector.available_ports() if c in NC_PORT_CODES]
-        except (NecError, NecNakError) as err:
+        except NecConnectionError:
+            raise
+        except NecError as err:
             _LOGGER.debug("input terminal request failed: %s", err)
         if not codes:
             codes = list(DEFAULT_PORT_CODES)
@@ -433,14 +600,18 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         """Discover the thermal sensors, modern command first."""
         try:
             count = await self.projector.thermal_sensor_count()
-        except (NecError, NecNakError):
+        except NecConnectionError:
+            raise
+        except NecError:
             count = 0
         if count:
             names: list[str] = []
             for index in range(count):
                 try:
                     names.append(await self.projector.thermal_sensor_name(index))
-                except (NecError, NecNakError):
+                except NecConnectionError:
+                    raise
+                except NecError:
                     names.append(f"Sensor {index + 1}")
             self.thermal_names = names
             return
@@ -449,6 +620,11 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         if legacy:
             self.thermal_names = list(legacy)
             self._legacy_temps = True
+
+    @property
+    def set_up_offline(self) -> bool:
+        """Whether the entities come from an earlier probe, not yet confirmed."""
+        return self._needs_probe
 
     @property
     def light_hours_detailed(self) -> bool:
@@ -465,17 +641,25 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
     async def _async_update_data(self) -> ProjectorData:
         """Fetch the current state; unreachable is reported as off, not as an error."""
         data = ProjectorData()
+        if self._skip_poll:
+            self._skip_poll = False
+            return data
         try:
             await self._poll_fast(data)
-        except (NecError, NecNakError) as err:
-            if not self._first_poll_done:
-                raise
-            _LOGGER.debug("projector unreachable: %s", err)
+        except NecError as err:
+            if self._reachable is not False:
+                _LOGGER.info("%s is not reachable, showing it as off: %s", self.entry.title, err)
+            self._reachable = False
             previous = self.data
             data.last_seen = previous.last_seen if previous else None
             return data
 
-        self._first_poll_done = True
+        recovered = self._reachable is False
+        if recovered:
+            _LOGGER.info("%s is reachable again", self.entry.title)
+        self._reachable = True
+        if self._needs_probe:
+            await self._reprobe()
         await self._keep_start_dark(data)
         await self._apply_pending(data)
         self._learn_macro(data)
@@ -483,7 +667,9 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         data.last_seen = dt_util.utcnow()
 
         self._poll_count += 1
-        slow_due = self._poll_count % SLOW_POLL_EVERY == 1 or self._poll_count == 1
+        slow_due = (
+            recovered or self._poll_count % SLOW_POLL_EVERY == 1 or self._poll_count == 1
+        )
         previous = self.data
         if slow_due:
             await self._poll_slow(data)

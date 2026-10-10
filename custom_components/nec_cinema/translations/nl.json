@@ -9,12 +9,19 @@
           "port": "Poort",
           "name": "Naam",
           "projector_id": "Projector-ID"
+        },
+        "data_description": {
+          "host": "IP-adres van de projectorkop op het besturingsnetwerk.",
+          "port": "TCP-poort van het cinema-besturingsprotocol. Alleen wijzigen als de projector op een andere poort staat.",
+          "name": "Naam voor het apparaat in Home Assistant. Laat je de standaard staan, dan wordt de modelnaam gebruikt.",
+          "projector_id": "Projector-ID dat op de kop is ingesteld. Laat op 0 tenzij meerdere projectoren één besturingslijn delen."
         }
       }
     },
     "error": {
       "cannot_connect": "Geen antwoord op de besturingspoort. Controleer het IP-adres en of externe besturing op de projector aanstaat.",
-      "refused": "De projector antwoordde wel, maar weigerde het commando."
+      "refused": "De projector antwoordde wel, maar weigerde het commando.",
+      "unknown": "Onverwachte fout. Kijk in het Home Assistant-log voor details."
     },
     "abort": {
       "already_configured": "Deze projector is al ingesteld."
@@ -28,6 +35,10 @@
         "data": {
           "scan_interval": "Pollinterval (seconden)",
           "macros": "Preset- (macro)toetsen"
+        },
+        "data_description": {
+          "scan_interval": "Hoe vaak de projector wordt uitgelezen. Lampuren, temperaturen en fouten worden elke zesde keer gelezen.",
+          "macros": "Optioneel. Overschrijft of vult de geleerde presetnamen aan, bijvoorbeeld: 1: Flat, 2: Scope."
         }
       }
     }

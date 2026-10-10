@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
     EntityCategory,
@@ -14,20 +13,20 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import COMMAND_OUTCOMES, DOMAIN, PROCESS_STATUS, PROCESS_STATUS_UNKNOWN
-from .coordinator import NecCinemaCoordinator
+from .const import COMMAND_OUTCOMES, PROCESS_STATUS, PROCESS_STATUS_UNKNOWN
+from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: NecCinemaConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the sensors."""
-    coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     entities: list[SensorEntity] = [
         NecProcessStatus(coordinator),
         NecLightHours(coordinator),

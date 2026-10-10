@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -10,7 +11,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResu
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
 
-from .client import NecClient, NecError, NecNakError, NecProjector
+from .client import NecClient, NecConnectionError, NecError, NecNakError, NecProjector
 from .const import (
     CONF_MACROS,
     CONF_PROJECTOR_ID,
@@ -20,6 +21,9 @@ from .const import (
     DOMAIN,
     MIN_SCAN_INTERVAL,
 )
+from .coordinator import resolve_model
+
+_LOGGER = logging.getLogger(__name__)
 
 USER_SCHEMA = vol.Schema(
     {
@@ -35,17 +39,25 @@ USER_SCHEMA = vol.Schema(
 )
 
 
-async def _probe(host: str, port: int, projector_id: int) -> tuple[str, str | None]:
+async def _probe(host: str, port: int, projector_id: int) -> tuple[str | None, str | None]:
     """Return the model name and serial number of the projector."""
     client = NecClient(host, port, projector_id)
     projector = NecProjector(client)
     try:
-        model = await projector.model_name()
+        reported = await projector.model_name()
         try:
             serial = await projector.serial_number()
-        except (NecError, NecNakError):
+        except NecConnectionError:
+            raise
+        except NecError:
             serial = None
-        return model, serial
+        try:
+            projector_type, subtype = await projector.projector_info()
+        except NecConnectionError:
+            raise
+        except NecError:
+            projector_type, subtype = None, None
+        return resolve_model(projector_type, subtype, reported), serial
     finally:
         await client.close()
 
@@ -61,6 +73,7 @@ class NecCinemaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Ask for the address of the projector."""
         errors: dict[str, str] = {}
         if user_input is not None:
+            self._async_abort_entries_match({CONF_HOST: user_input[CONF_HOST]})
             try:
                 model, serial = await _probe(
                     user_input[CONF_HOST],
@@ -71,6 +84,9 @@ class NecCinemaConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors["base"] = "refused"
             except NecError:
                 errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("unexpected error while contacting the projector")
+                errors["base"] = "unknown"
             else:
                 await self.async_set_unique_id(
                     serial or f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"

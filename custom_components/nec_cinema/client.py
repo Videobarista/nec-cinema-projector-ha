@@ -29,6 +29,10 @@ class NecError(Exception):
     """Communication with the projector failed."""
 
 
+class NecConnectionError(NecError):
+    """The projector could not be reached, or the connection dropped."""
+
+
 class NecNakError(NecError):
     """The projector refused the command."""
 
@@ -82,6 +86,12 @@ class NecClient:
         except (TimeoutError, OSError) as err:
             _LOGGER.debug("error while closing the connection: %s", err)
 
+    def _reason(self, err: Exception) -> str:
+        """Describe a socket error; a timeout carries no text of its own."""
+        if isinstance(err, TimeoutError):
+            return f"no answer within {self._timeout:g} s"
+        return str(err) or type(err).__name__
+
     async def _connect(self) -> None:
         """Open the socket if it is not open yet."""
         if self.connected:
@@ -92,7 +102,9 @@ class NecClient:
                 asyncio.open_connection(self._host, self._port), self._timeout
             )
         except (TimeoutError, OSError) as err:
-            raise NecError(f"cannot connect to {self._host}:{self._port}: {err}") from err
+            raise NecConnectionError(
+                f"cannot connect to {self._host}:{self._port}: {self._reason(err)}"
+            ) from err
 
     async def request(
         self,
@@ -127,14 +139,14 @@ class NecClient:
         await self._connect()
         reader, writer = self._reader, self._writer
         if reader is None or writer is None:
-            raise NecError("no connection available")
+            raise NecConnectionError("no connection available")
         frame = build_frame(id1, id2, data, projector_id=self._projector_id)
         _LOGGER.debug("-> %s", frame.hex(" "))
         try:
             writer.write(frame)
             await writer.drain()
         except (TimeoutError, OSError) as err:
-            raise NecError(f"send failed: {err}") from err
+            raise NecConnectionError(f"send failed: {self._reason(err)}") from err
 
         # Skip any stale frame that does not belong to this request.
         expected = accept_id2 or (id2 & 0xFF,)
@@ -156,9 +168,9 @@ class NecClient:
                 reader.readexactly(data_length(header) + 1), self._timeout
             )
         except asyncio.IncompleteReadError as err:
-            raise NecError("connection closed by projector") from err
+            raise NecConnectionError("connection closed by projector") from err
         except (TimeoutError, OSError) as err:
-            raise NecError(f"no response: {err}") from err
+            raise NecConnectionError(f"no response: {self._reason(err)}") from err
         _LOGGER.debug("<- %s", (header + tail).hex(" "))
         try:
             return parse_frame(header, tail)

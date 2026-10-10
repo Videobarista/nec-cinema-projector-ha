@@ -5,18 +5,16 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
-from .coordinator import NecCinemaCoordinator
+from .coordinator import NecCinemaConfigEntry
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    hass: HomeAssistant, entry: NecCinemaConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
-    coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     data = asdict(coordinator.data) if coordinator.data else {}
     if data.get("last_seen"):
         data["last_seen"] = data["last_seen"].isoformat()
@@ -28,5 +26,6 @@ async def async_get_config_entry_diagnostics(
         "lamp_output_kind": coordinator.lamp_output_kind,
         "sources": coordinator.source_map,
         "thermal_sensors": coordinator.thermal_names,
+        "set_up_offline": coordinator.set_up_offline,
         "state": data,
     }

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from homeassistant.components.select import SelectEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import CONF_MACROS, DOMAIN, LAMP_MODE_CODES, LAMP_MODE_UNKNOWN, LAMP_MODES
-from .coordinator import NecCinemaCoordinator
+from .const import CONF_MACROS, LAMP_MODE_CODES, LAMP_MODE_UNKNOWN, LAMP_MODES
+from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
 
@@ -30,11 +29,11 @@ def parse_macros(raw: str | None) -> dict[int, str]:
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: NecCinemaConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the selects."""
-    coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     entities: list[SelectEntity] = [
         NecMacroSelect(coordinator, entry),
     ]
@@ -53,7 +52,7 @@ class NecMacroSelect(NecCinemaEntity, SelectEntity):
     options take precedence.
     """
 
-    def __init__(self, coordinator: NecCinemaCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: NecCinemaCoordinator, entry: NecCinemaConfigEntry) -> None:
         """Initialise the select."""
         super().__init__(coordinator, "macro")
         self._entry = entry

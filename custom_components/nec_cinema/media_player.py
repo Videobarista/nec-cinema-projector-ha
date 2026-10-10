@@ -4,65 +4,29 @@ from __future__ import annotations
 
 from typing import Any
 
-import voluptuous as vol
-
 from homeassistant.components.media_player import (
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
 )
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import config_validation as cv, entity_platform
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN, LENS_AXES
-from .coordinator import NecCinemaCoordinator
+from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
-
-SERVICE_SELECT_TITLE = "select_title"
-SERVICE_SELECT_MACRO = "select_macro"
-SERVICE_LENS_CONTROL = "lens_control"
-SERVICE_PICTURE_MUTE = "picture_mute"
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: NecCinemaConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the media player."""
-    coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([NecProjectorMediaPlayer(coordinator)])
+    """Set up the media player.
 
-    platform = entity_platform.async_get_current_platform()
-    platform.async_register_entity_service(
-        SERVICE_SELECT_TITLE,
-        {vol.Required("title"): vol.All(vol.Coerce(int), vol.Range(min=0, max=99))},
-        "async_select_title",
-    )
-    platform.async_register_entity_service(
-        SERVICE_SELECT_MACRO,
-        {vol.Required("macro"): vol.All(vol.Coerce(int), vol.Range(min=1, max=20))},
-        "async_select_macro",
-    )
-    platform.async_register_entity_service(
-        SERVICE_LENS_CONTROL,
-        {
-            vol.Required("axis"): vol.In(list(LENS_AXES)),
-            vol.Required("direction"): vol.In(["plus", "minus"]),
-            vol.Optional("duration", default=0.25): vol.All(
-                vol.Coerce(float), vol.In([0.25, 0.5, 1.0])
-            ),
-        },
-        "async_lens_control",
-    )
-    platform.async_register_entity_service(
-        SERVICE_PICTURE_MUTE,
-        {vol.Required("enabled"): cv.boolean},
-        "async_picture_mute",
-    )
+    Its actions are registered once for the integration, in async_setup.
+    """
+    async_add_entities([NecProjectorMediaPlayer(entry.runtime_data)])
 
 
 class NecProjectorMediaPlayer(NecCinemaEntity, MediaPlayerEntity):

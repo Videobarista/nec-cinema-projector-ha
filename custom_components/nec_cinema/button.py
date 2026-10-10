@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN
-from .coordinator import NecCinemaCoordinator
+from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
 # LENS CONTROL (053.) DATA02: 03H drives the motor for 0.25 s towards plus,
@@ -32,11 +30,11 @@ LENS_BUTTONS: tuple[tuple[str, str, int], ...] = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: NecCinemaConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the lens buttons."""
-    coordinator: NecCinemaCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry.runtime_data
     entities: list[ButtonEntity] = [
         NecLensButton(coordinator, key, axis, value) for key, axis, value in LENS_BUTTONS
     ]
