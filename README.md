@@ -20,6 +20,9 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 > Note: this is **not** the NEC installation projector protocol on port 7142. That command set is a
 > different one and does not work on cinema heads.
 
+> This is an independent community project. It is **not affiliated with, endorsed by, sponsored by
+> or supported by** Sharp NEC Display Solutions, Sharp or NEC. See [Disclaimer](#disclaimer).
+
 ## What you get
 
 | Entity | Type | What it does |
@@ -278,6 +281,20 @@ It is deliberately generic: the Sharp NEC marks belong to Sharp NEC Display
 Solutions and are not redistributed here. Replace those files with your own if
 you have the right to use a manufacturer's artwork; see `Brand/README.md` for
 the sizes.
+
+## Disclaimer
+
+This integration is an independent, community-made project. It is not affiliated with, endorsed
+by, sponsored by or supported by Sharp NEC Display Solutions, Ltd., Sharp Corporation, NEC
+Corporation or any of their subsidiaries. "Sharp", "NEC", "Sharp NEC" and model names such as
+NC1200C and NC900C-A are trademarks of their respective owners. They are used here only to
+describe which projectors the integration works with.
+
+The integration is built from the publicly documented control protocol and provided as is,
+without warranty of any kind (see the [license](LICENSE)). It switches power, the lamp, the
+douser and inputs of real cinema equipment: check how it behaves on your own installation before
+you rely on it during a screening. For help with the projector itself, contact Sharp NEC or your
+dealer. Problems with this integration belong in this repository's issues, not with them.
 
 ## License
 

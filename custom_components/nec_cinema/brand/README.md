@@ -1,12 +1,13 @@
 # Brand images
 
 Home Assistant 2026.3 and newer serve brand images from this folder, and local
-files take priority over the central brands CDN. Nothing is shipped here on
-purpose: the Sharp NEC marks belong to Sharp NEC Display Solutions, and this
-project does not redistribute them.
+files take priority over the central brands CDN. The icon shipped here is a
+plain, self-drawn projector on purpose: the Sharp NEC marks belong to Sharp NEC
+Display Solutions, and this project does not redistribute them. This project is
+not affiliated with or endorsed by Sharp NEC.
 
-Drop your own files in this folder and they appear on the integration page
-after a restart.
+Replace the files in this folder with your own and they appear on the
+integration page after a restart.
 
 | File | Size | Required |
 | --- | --- | --- |

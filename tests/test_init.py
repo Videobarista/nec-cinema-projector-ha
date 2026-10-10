@@ -44,7 +44,9 @@ async def test_setup_and_unload(
     await _setup(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, SERIAL)})
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, SERIAL), mock_config_entry.entry_id
+    )
     assert device is not None
     assert device.model == "NC1200C"
     assert device.serial_number == SERIAL
@@ -79,7 +81,9 @@ async def test_offline_setup_from_memory(
     await _setup(hass, mock_config_entry)
     assert mock_config_entry.state is ConfigEntryState.LOADED
 
-    device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, SERIAL)})
+    device = dr.async_get(hass).async_get_device_by_identifier(
+        (DOMAIN, SERIAL), mock_config_entry.entry_id
+    )
     assert device is not None
     assert device.model == "NC1200C"
 
