@@ -833,6 +833,12 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             "at": dt_util.utcnow(),
         }
 
+    def record_refusal(self, action: str, outcome: str, message: str) -> None:
+        """Record a command turned down before it reached the projector."""
+        _LOGGER.debug("%s not sent: %s", action, message)
+        self._record(action, outcome, message)
+        self.async_update_listeners()
+
     def _record_error(self, action: str, outcome: str, err: Exception) -> None:
         """Remember a failed command, including the projector's own wording."""
         self._record(action, outcome, f"{action}: {err}")
@@ -882,7 +888,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             try:
                 await getattr(self.projector, action)(*args)
             except (NecError, NecNakError) as err:
-                _LOGGER.warning("held command %s still refused: %s", action, err)
+                _LOGGER.info("held command %s still refused: %s", action, err)
                 self._record_error(action, "refused", err)
             else:
                 _LOGGER.info("held command %s applied now the projector is ready", action)
@@ -926,7 +932,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 lockout = await self._current_lockout()
                 if lockout:
                     blocked = NecLampLockoutError(
-                        f"lamp switching locked for another {lockout} s", err.code, lockout
+                        f"the lamp may not be switched yet, {lockout} s to go", err.code, lockout
                     )
                     self._record_error(action, "busy", blocked)
                     raise blocked from err

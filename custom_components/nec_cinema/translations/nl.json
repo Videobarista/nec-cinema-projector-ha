@@ -254,25 +254,5 @@
         }
       }
     }
-  },
-  "exceptions": {
-    "command_busy": {
-      "message": "De projector is bezig ({status}) en accepteerde het commando niet. Hij meldde: {reason}"
-    },
-    "command_locked": {
-      "message": "De projector meldt {status} en is dus niet bezig, maar weigerde het commando toch: {reason}. Meestal betekent dat dat handbediening geblokkeerd is, bijvoorbeeld doordat metadata of GPIO-besturing op de projector aanstaat."
-    },
-    "command_refused": {
-      "message": "De projector weigerde het commando: {reason}"
-    },
-    "command_failed": {
-      "message": "Kan de projector niet bereiken: {reason}"
-    },
-    "lamp_mode_lamp_on": {
-      "message": "De lampmodus kan alleen gewijzigd worden als de lamp uit is. Zet de lichtbron uit, wacht tot hij is afgekoeld en probeer het opnieuw."
-    },
-    "lamp_lockout": {
-      "message": "De projector staat het schakelen van de lamp nog niet toe: nog {seconds} s. Na het ontsteken moet de lamp even blijven branden, en na het doven eerst afkoelen."
-    }
   }
 }

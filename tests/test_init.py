@@ -11,7 +11,6 @@ from custom_components.nec_cinema.const import DOMAIN
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .conftest import SERIAL, FakeDualLampProjector, FakeProjector
@@ -225,17 +224,18 @@ async def test_lamp_mode_with_lamp_lit(
     dual_projector: FakeDualLampProjector,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """With a lamp lit the change is refused before asking the projector."""
+    """With a lamp lit the change is not sent; the reason goes to Last command."""
     await _setup(hass, mock_config_entry)
-    with pytest.raises(HomeAssistantError) as err:
-        await hass.services.async_call(
-            "select",
-            "select_option",
-            {"entity_id": _entity_id(hass, "select", "lamp_mode"), "option": "lamp1"},
-            blocking=True,
-        )
-    assert err.value.translation_key == "lamp_mode_lamp_on"
+    await hass.services.async_call(
+        "select",
+        "select_option",
+        {"entity_id": _entity_id(hass, "select", "lamp_mode"), "option": "lamp1"},
+        blocking=True,
+    )
     dual_projector.set_lamp_mode.assert_not_awaited()
+    assert _state(hass, "sensor", "last_command") == "busy"
+    last = hass.states.get(_entity_id(hass, "sensor", "last_command"))
+    assert "only be changed while the lamp is off" in last.attributes["message"]
 
 
 async def test_dual_lamp_entities(
@@ -257,19 +257,19 @@ async def test_light_off_during_lockout(
     dual_projector: FakeDualLampProjector,
     mock_config_entry: MockConfigEntry,
 ) -> None:
-    """A light command refused during the lockout says how long is left."""
+    """A light command refused during the lockout is recorded, not raised."""
     await _setup(hass, mock_config_entry)
     dual_projector.lockout = 37
-    with pytest.raises(HomeAssistantError) as err:
-        await hass.services.async_call(
-            "switch",
-            "turn_off",
-            {"entity_id": _entity_id(hass, "switch", "light")},
-            blocking=True,
-        )
-    assert err.value.translation_key == "lamp_lockout"
-    assert err.value.translation_placeholders == {"seconds": "37"}
+    await hass.services.async_call(
+        "switch",
+        "turn_off",
+        {"entity_id": _entity_id(hass, "switch", "light")},
+        blocking=True,
+    )
     assert dual_projector.mode == 0x01
+    assert _state(hass, "sensor", "last_command") == "busy"
+    last = hass.states.get(_entity_id(hass, "sensor", "last_command"))
+    assert "37 s to go" in last.attributes["message"]
 
 
 async def test_cooling_bar_after_light_off(

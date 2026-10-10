@@ -179,8 +179,8 @@ The NC900C-A and the NC1000C family run on two lamps, and treat them carefully:
 
 - After striking, the lamp has to stay lit for about 90 seconds. After putting it out, it cannot be
   struck again or moved to another lamp mode for about as long. The projector refuses lamp commands
-  meanwhile. **Lamp switching lockout** counts those seconds down, and a refused command says how
-  long is left instead of just failing.
+  meanwhile. **Lamp switching lockout** counts those seconds down, and the **Last command** sensor
+  says how long was left when a command was turned down.
 - The lamp mode (both lamps, lamp 1 only, lamp 2 only) can only be changed while the lamp is out
   and the lockout has run out.
 - Putting the lamp out with the power on does not put these heads in a cooling state. **Cooling
@@ -189,31 +189,58 @@ The NC900C-A and the NC1000C family run on two lamps, and treat them carefully:
 
 ## Seeing why a command was refused
 
-The **Last command** sensor holds the outcome of the most recent command, so a
-refusal does not have to be chased through the log. It keeps that outcome until
-the next command, so a card should lead with the projector's current state and
-only mention the last command when something actually needs attention:
+A projector turning a command down is part of normal operation: it is still starting up or cooling,
+the lamp may not be switched yet, or it is switched off. So a refusal is **not** raised as an error
+and does not end up in the Home Assistant log (only in the debug log). The **Last command** sensor
+keeps the outcome instead, with the projector's own reason, the status it was in and the raw NAK
+code as attributes.
+
+A Markdown card can show the projector at a glance and the reason for a refusal for two minutes
+after it happened. Set the entity ids at the top to your own; the lamp lines only show on dual
+lamp heads (NC900C-A, NC1000C family):
 
 ```yaml
 type: markdown
 content: >
+  {% set status = 'sensor.projector_status' %}
+  {% set title = 'sensor.projector_current_title' %}
+  {% set light = 'binary_sensor.projector_light_source_lit' %}
+  {% set lamp1 = 'binary_sensor.projector_lamp_1_lit' %}
+  {% set lamp2 = 'binary_sensor.projector_lamp_2_lit' %}
+  {% set mode = 'select.projector_lamp_mode' %}
+  {% set douser = 'cover.projector_douser' %}
+  {% set lockout = 'sensor.projector_lamp_switching_lockout' %}
+  {% set cooling = 'sensor.projector_cooling_progress' %}
+  {% set cooling_left = 'sensor.projector_cooling_remaining' %}
   {% set last = 'sensor.projector_last_command' %}
-  {% set outcome = states(last) %}
+
+  ## {{ state_translated(status) }}
+
+  {{ states(title) if has_value(title) else '' }}
+
+  {% if has_value(lamp1) %}
+  Lamp 1 {{ '●' if is_state(lamp1, 'on') else '○' }}  Lamp 2 {{ '●' if is_state(lamp2, 'on') else '○' }}
+  ({{ state_translated(mode) }})
+  {% else %}
+  Light source {{ '●' if is_state(light, 'on') else '○' }}
+  {% endif %}
+  · Douser {{ state_translated(douser) | lower }}
+
+  {% if states(lockout) | int(0) > 0 %}
+  **Lamp switching locked for {{ states(lockout) }} s**
+  {% endif %}
+  {% if states(cooling) | int(0) > 0 %}
+  Cooling: {{ states(cooling) }} % ({{ states(cooling_left) }} s to go)
+  {% endif %}
+  {% set at = state_attr(last, 'at') %}
   {% set pending = state_attr(last, 'pending') %}
-
-  ## {{ states('sensor.projector_status') }}
-
   {% if pending %}
   Waiting for the projector: {{ pending | join(', ') }}
-  {% elif outcome not in ['ok', 'unknown', 'unavailable'] %}
-  **{{ state_attr(last, 'message') }}**
-  {% if state_attr(last, 'code') %} (code {{ state_attr(last, 'code') }}){% endif %}
-  while the projector reported {{ state_attr(last, 'projector_status') }},
-  {{ relative_time(as_datetime(state_attr(last, 'at'))) }} ago.
+  {% elif at and states(last) not in ['ok', 'unknown', 'unavailable']
+       and (now() - as_datetime(at)).total_seconds() < 120 %}
+  ⚠️ {{ state_attr(last, 'message') }}
   {% endif %}
 ```
-
-Replace the two entity ids with your own.
 
 ## Media block (IMS / IMB)
 

@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import CONF_MACROS, DOMAIN, LAMP_MODE_CODES, LAMP_MODE_UNKNOWN, LAMP_MODES
+from .const import CONF_MACROS, LAMP_MODE_CODES, LAMP_MODE_UNKNOWN, LAMP_MODES
 from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
@@ -117,8 +117,10 @@ class NecLampModeSelect(NecCinemaEntity, SelectEntity):
         """Set the lamp mode, which the projector allows only with the lamp off."""
         data = self.coordinator.data
         if data.light_on or data.process_status in LAMP_LIT_STATUSES:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="lamp_mode_lamp_on",
+            self.coordinator.record_refusal(
+                "set_lamp_mode",
+                "busy",
+                "set_lamp_mode: the lamp mode can only be changed while the lamp is off",
             )
+            return
         await self.async_run_command("set_lamp_mode", LAMP_MODE_CODES[option])

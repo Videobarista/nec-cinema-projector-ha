@@ -254,25 +254,5 @@
         }
       }
     }
-  },
-  "exceptions": {
-    "command_busy": {
-      "message": "The projector is busy ({status}) and did not accept the command. It was reported as: {reason}"
-    },
-    "command_locked": {
-      "message": "The projector reports {status}, so it is not busy, but it refused the command anyway: {reason}. This usually means manual control is locked out, for example because metadata or GPIO control is enabled on the projector."
-    },
-    "command_refused": {
-      "message": "The projector refused the command: {reason}"
-    },
-    "command_failed": {
-      "message": "Could not reach the projector: {reason}"
-    },
-    "lamp_mode_lamp_on": {
-      "message": "The lamp mode can only be changed while the lamp is off. Switch the light source off, wait until it has cooled down, and try again."
-    },
-    "lamp_lockout": {
-      "message": "The projector does not allow switching the lamp yet: {seconds} s to go. After striking the lamp has to stay lit for a while, and after putting it out it has to cool down first."
-    }
   }
 }

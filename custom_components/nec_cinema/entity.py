@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+import logging
 from typing import Any
 
 from homeassistant.const import CONF_HOST
-from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import NecError, NecLampLockoutError, NecLockedError, NecNakError
-from .const import DOMAIN, TRANSIENT_NAK_CODES
+from .client import NecError
+from .const import DOMAIN
 from .coordinator import NecCinemaCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class NecCinemaEntity(CoordinatorEntity[NecCinemaCoordinator]):
@@ -40,51 +42,21 @@ class NecCinemaEntity(CoordinatorEntity[NecCinemaCoordinator]):
         return super().available and self.coordinator.data.available
 
     async def async_run_command(self, action: str, *args: Any) -> None:
-        """Send a projector command, turning protocol errors into readable ones."""
+        """Send a projector command; a refusal is recorded, not raised."""
         await self.async_guarded(self.coordinator.async_send, action, *args)
 
     async def async_guarded(self, call: Callable[..., Awaitable[None]], *args: Any) -> None:
-        """Run a coordinator call, turning protocol errors into readable ones.
+        """Run a coordinator call; a refusal is recorded, not raised.
 
-        A head that is still igniting or cooling refuses commands with a NAK
-        that clears by itself. The coordinator retries those; if they still
-        fail, say so plainly instead of quoting the protocol at the user.
+        The projector turning a command down is part of normal operation: it
+        is starting up or cooling, the lamp may not be switched yet, manual
+        control is locked, or it is switched off altogether. Raising would put
+        an error in the Home Assistant log for every such press. The outcome,
+        with the projector's own reason, is kept in the Last command sensor
+        instead and only logged at debug level.
         """
         try:
             await call(*args)
-        except NecLampLockoutError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="lamp_lockout",
-                translation_placeholders={"seconds": str(err.seconds)},
-            ) from err
-        except NecLockedError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="command_locked",
-                translation_placeholders={
-                    "status": self.coordinator.data.process_status,
-                    "reason": str(err),
-                },
-            ) from err
-        except NecNakError as err:
-            if err.code in TRANSIENT_NAK_CODES:
-                raise HomeAssistantError(
-                    translation_domain=DOMAIN,
-                    translation_key="command_busy",
-                    translation_placeholders={
-                        "status": self.coordinator.data.process_status,
-                        "reason": str(err),
-                    },
-                ) from err
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="command_refused",
-                translation_placeholders={"reason": str(err)},
-            ) from err
         except NecError as err:
-            raise HomeAssistantError(
-                translation_domain=DOMAIN,
-                translation_key="command_failed",
-                translation_placeholders={"reason": str(err)},
-            ) from err
+            _LOGGER.debug("%s: command not carried out: %s", self.entity_id, err)
+            self.coordinator.async_update_listeners()
