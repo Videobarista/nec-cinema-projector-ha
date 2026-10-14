@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.const import (
     PERCENTAGE,
@@ -42,7 +44,13 @@ async def async_setup_entry(
     if coordinator.lamp_details:
         entities.extend([NecLampRemaining(coordinator), NecLampLockout(coordinator)])
     if coordinator.has_lamp2:
-        entities.extend([NecLamp2Hours(coordinator), NecLamp2Remaining(coordinator)])
+        entities.extend(
+            [
+                NecLamp2Hours(coordinator),
+                NecLamp2Remaining(coordinator),
+                NecLamp2Strikes(coordinator),
+            ]
+        )
     if coordinator.lamp_output_kind == "percent":
         entities.append(NecLightPower(coordinator))
     elif coordinator.lamp_output_kind == "watt":
@@ -87,6 +95,9 @@ class NecLightHours(NecCinemaEntity, SensorEntity):
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
         super().__init__(coordinator, "light_hours")
+        if coordinator.has_lamp2:
+            # Named after lamp 1 so it sorts next to its lamp 2 counterpart.
+            self._attr_translation_key = "lamp1_hours"
 
     @property
     def native_value(self) -> float | None:
@@ -108,6 +119,9 @@ class NecLampRemaining(NecCinemaEntity, SensorEntity):
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
         super().__init__(coordinator, "lamp_remaining")
+        if coordinator.has_lamp2:
+            # Named after lamp 1 so it sorts next to its lamp 2 counterpart.
+            self._attr_translation_key = "lamp1_remaining"
 
     @property
     def native_value(self) -> int | None:
@@ -124,6 +138,9 @@ class NecLampStrikes(NecCinemaEntity, SensorEntity):
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
         super().__init__(coordinator, "lamp_strikes")
+        if coordinator.has_lamp2:
+            # Named after lamp 1 so it sorts next to its lamp 2 counterpart.
+            self._attr_translation_key = "lamp1_strikes"
 
     @property
     def native_value(self) -> int | None:
@@ -170,12 +187,29 @@ class NecLamp2Remaining(NecCinemaEntity, SensorEntity):
         return self.coordinator.data.lamp2_remaining
 
 
+class NecLamp2Strikes(NecCinemaEntity, SensorEntity):
+    """How often the second lamp has been struck."""
+
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator: NecCinemaCoordinator) -> None:
+        """Initialise the sensor."""
+        super().__init__(coordinator, "lamp2_strikes")
+
+    @property
+    def native_value(self) -> int | None:
+        """Return the strike count of lamp 2."""
+        return self.coordinator.data.lamp2_strikes
+
+
 class NecLightPower(NecCinemaEntity, SensorEntity):
     """Light source power setting."""
 
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 1
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
@@ -194,6 +228,7 @@ class NecLampWatt(NecCinemaEntity, SensorEntity):
     _attr_native_unit_of_measurement = UnitOfPower.WATT
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 0
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
         """Initialise the sensor."""
@@ -270,7 +305,6 @@ class NecCoolingRemaining(NecCinemaEntity, SensorEntity):
 
     _attr_device_class = SensorDeviceClass.DURATION
     _attr_native_unit_of_measurement = UnitOfTime.SECONDS
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_suggested_display_precision = 0
 
     def __init__(self, coordinator: NecCinemaCoordinator) -> None:
@@ -380,8 +414,12 @@ class NecTemperature(NecCinemaEntity, SensorEntity):
         """Initialise the sensor."""
         super().__init__(coordinator, f"temperature_{index}")
         self._sensor_name = name
-        self._attr_translation_key = None
-        self._attr_name = name
+        # "Temperature DMD-B", "Temperature 2": grouped instead of scattered.
+        numbered = re.fullmatch(r"Temp(?:erature)?\s*(\d+)", name)
+        self._attr_translation_key = "temperature"
+        self._attr_translation_placeholders = {
+            "sensor": numbered.group(1) if numbered else name
+        }
 
     @property
     def native_value(self) -> float | None:

@@ -124,7 +124,7 @@
         "name": "Lichtopbrengst"
       },
       "cooling_remaining": {
-        "name": "Resterende koeltijd"
+        "name": "Koeltijd resterend"
       },
       "current_title": {
         "name": "Huidige titel"
@@ -173,32 +173,47 @@
       },
       "lamp_lockout": {
         "name": "Lampblokkade"
+      },
+      "lamp1_hours": {
+        "name": "Lamp 1 branduren"
+      },
+      "lamp1_remaining": {
+        "name": "Lamp 1 resterend"
+      },
+      "lamp1_strikes": {
+        "name": "Lamp 1 ontstekingen"
+      },
+      "lamp2_strikes": {
+        "name": "Lamp 2 ontstekingen"
+      },
+      "temperature": {
+        "name": "Temperatuur {sensor}"
       }
     },
     "button": {
       "lens_zoom_plus": {
-        "name": "Zoom plus"
+        "name": "Lens zoom plus"
       },
       "lens_zoom_minus": {
-        "name": "Zoom min"
+        "name": "Lens zoom min"
       },
       "lens_focus_plus": {
-        "name": "Focus plus"
+        "name": "Lens focus plus"
       },
       "lens_focus_minus": {
-        "name": "Focus min"
+        "name": "Lens focus min"
       },
       "lens_shift_h_plus": {
-        "name": "Lensshift H plus"
+        "name": "Lens shift H plus"
       },
       "lens_shift_h_minus": {
-        "name": "Lensshift H min"
+        "name": "Lens shift H min"
       },
       "lens_shift_v_plus": {
-        "name": "Lensshift V plus"
+        "name": "Lens shift V plus"
       },
       "lens_shift_v_minus": {
-        "name": "Lensshift V min"
+        "name": "Lens shift V min"
       },
       "forget_macros": {
         "name": "Geleerde macro's wissen"

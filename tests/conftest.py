@@ -231,6 +231,20 @@ class FakeDualLampProjector(FakeProjector):
         self._check()
         return self.lamp
 
+    async def lamp_info_modern(self) -> dict[str, int]:
+        """LAMP INFORMATION REQUEST 3, with the lamp 2 fields."""
+        self._check()
+        return {
+            "hours": 1264,
+            "warning_hours": 2500,
+            "remaining": 50,
+            "strikes": 661,
+            "lamp2_hours": 1824,
+            "lamp2_warning_hours": 2500,
+            "lamp2_remaining": 28,
+            "lamp2_strikes": 928,
+        }
+
     async def running_status(self) -> dict[str, Any]:
         """RUNNING STATUS REQUEST with the dual lamp fields."""
         status = await super().running_status()

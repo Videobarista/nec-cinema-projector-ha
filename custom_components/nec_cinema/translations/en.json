@@ -173,20 +173,35 @@
       },
       "lamp_lockout": {
         "name": "Lamp switching lockout"
+      },
+      "lamp1_hours": {
+        "name": "Lamp 1 hours"
+      },
+      "lamp1_remaining": {
+        "name": "Lamp 1 remaining"
+      },
+      "lamp1_strikes": {
+        "name": "Lamp 1 strikes"
+      },
+      "lamp2_strikes": {
+        "name": "Lamp 2 strikes"
+      },
+      "temperature": {
+        "name": "Temperature {sensor}"
       }
     },
     "button": {
       "lens_zoom_plus": {
-        "name": "Zoom plus"
+        "name": "Lens zoom plus"
       },
       "lens_zoom_minus": {
-        "name": "Zoom minus"
+        "name": "Lens zoom minus"
       },
       "lens_focus_plus": {
-        "name": "Focus plus"
+        "name": "Lens focus plus"
       },
       "lens_focus_minus": {
-        "name": "Focus minus"
+        "name": "Lens focus minus"
       },
       "lens_shift_h_plus": {
         "name": "Lens shift H plus"

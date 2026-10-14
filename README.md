@@ -35,11 +35,11 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Douser open | `switch` | The same douser as a plain switch (disabled by default) |
 | Picture mute | `switch` | Electronic blanking, douser stays put |
 | Macro | `select` | Preset (macro) keys, by the names the projector gave them |
-| Lens | `button` | Zoom, focus and lens shift, a quarter second per press |
+| Lens | `button` | Lens zoom, focus and shift, a quarter second per press |
 | Status | `sensor` | Standby, ignition, running, cooling, light error, … |
 | Light source hours | `sensor` | Lamp or laser usage time, with the warning threshold as an attribute |
 | Lamp remaining | `sensor` | Remaining lamp life in percent, where the head reports it |
-| Lamp 2 hours / remaining | `sensor` | The same for the second lamp, on dual lamp heads |
+| Lamp 2 hours / remaining / strikes | `sensor` | The same for the second lamp, on dual lamp heads, where the first lamp's sensors are named Lamp 1 |
 | Lamp strikes | `sensor` | How often the lamp has been struck |
 | Light output | `sensor` | Configured output power in percent (newer heads) |
 | Lamp power / current / voltage | `sensor` | Measured by the lamp power supply (NC3240S-A, NC3200S, NC2000C, NC1200C) |
@@ -50,7 +50,7 @@ Built from *Control Commands for Cinema Projector Series 2*, rev. 15.0 (document
 | Active errors | `sensor` | Error count, with the decoded messages as an attribute |
 | Last seen | `sensor` | Timestamp of the last successful poll |
 | Last command | `sensor` | How the most recent command went, with the projector's own wording, the status it was in and the raw NAK code as attributes |
-| Temperatures | `sensor` | One per thermal sensor, discovered from the projector |
+| Temperature … | `sensor` | One per thermal sensor, discovered from the projector and named after it |
 | Light source | `binary_sensor` | Whether the lamp or laser is actually lit |
 | Lamp 1 lit / Lamp 2 lit | `binary_sensor` | Which lamp is lit, on dual lamp heads |
 | Projector error | `binary_sensor` | Problem class, with the messages as an attribute |
