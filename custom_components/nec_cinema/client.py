@@ -24,6 +24,16 @@ _LOGGER = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 8.0
 
+# Longest a whole request may take, connecting included. Every read has its
+# own timeout, but a projector that keeps answering just in time, or with
+# frames that belong to nothing, could otherwise hold the connection for over
+# a minute.
+REQUEST_TIMEOUT = 20.0
+
+# Longest model name, serial number or sensor name taken over from the
+# projector. The frame allows 4 KB; real ones are a dozen characters.
+MAX_NAME_LENGTH = 64
+
 
 class NecError(Exception):
     """Communication with the projector failed."""
@@ -74,12 +84,14 @@ class NecClient:
         port: int,
         projector_id: int = 0x00,
         timeout: float = DEFAULT_TIMEOUT,
+        request_timeout: float = REQUEST_TIMEOUT,
     ) -> None:
         """Initialise the client."""
         self._host = host
         self._port = port
         self._projector_id = projector_id
         self._timeout = timeout
+        self._request_timeout = request_timeout
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
         self._lock = asyncio.Lock()
@@ -96,8 +108,12 @@ class NecClient:
             return
         try:
             writer.close()
-            await writer.wait_closed()
-        except (TimeoutError, OSError) as err:
+            await asyncio.wait_for(writer.wait_closed(), 2.0)
+        except TimeoutError:
+            # The other end does not let go; drop the socket without waiting.
+            _LOGGER.debug("the connection did not close in time, dropping it")
+            writer.transport.abort()
+        except OSError as err:
             _LOGGER.debug("error while closing the connection: %s", err)
 
     def _reason(self, err: Exception) -> str:
@@ -125,11 +141,25 @@ class NecClient:
         id1: int,
         id2: int,
         data: bytes = b"",
+        *,
+        private: bool = False,
     ) -> Response:
-        """Send a command and return the matching response."""
+        """Send a command and return the matching response.
+
+        ``private`` keeps the data of the answer out of the debug log; it is
+        used for the serial number.
+        """
         async with self._lock:
             try:
-                return await self._request(id1, id2, data)
+                async with asyncio.timeout(self._request_timeout):
+                    return await self._request(id1, id2, data, private)
+            except TimeoutError as err:
+                # Timeouts of the single steps are reported as NecConnectionError
+                # by _request, so this is the limit on the request as a whole.
+                await self.close()
+                raise NecConnectionError(
+                    f"no complete answer within {self._request_timeout:g} s"
+                ) from err
             except NecNakError:
                 raise
             except NecError:
@@ -142,6 +172,7 @@ class NecClient:
         id1: int,
         id2: int,
         data: bytes,
+        private: bool,
     ) -> Response:
         await self._connect()
         reader, writer = self._reader, self._writer
@@ -157,7 +188,7 @@ class NecClient:
 
         # Skip any stale frame that does not belong to this request.
         for _ in range(4):
-            response = await self._read_frame(reader)
+            response = await self._read_frame(reader, private)
             if response.id2 == id2 & 0xFF and (response.id1 & ACK_BIT):
                 if response.is_nak:
                     raise NecNakError(response.error_text, response.error_code)
@@ -167,7 +198,7 @@ class NecClient:
             )
         raise NecError("no matching response")
 
-    async def _read_frame(self, reader: asyncio.StreamReader) -> Response:
+    async def _read_frame(self, reader: asyncio.StreamReader, private: bool) -> Response:
         try:
             header = await asyncio.wait_for(reader.readexactly(HEADER_LENGTH), self._timeout)
             tail = await asyncio.wait_for(
@@ -177,7 +208,10 @@ class NecClient:
             raise NecConnectionError("connection closed by projector") from err
         except (TimeoutError, OSError) as err:
             raise NecConnectionError(f"no response: {self._reason(err)}") from err
-        _LOGGER.debug("<- %s", (header + tail).hex(" "))
+        if private:
+            _LOGGER.debug("<- %s [%s data bytes not logged]", header.hex(" "), len(tail) - 1)
+        else:
+            _LOGGER.debug("<- %s", (header + tail).hex(" "))
         try:
             return parse_frame(header, tail)
         except ValueError as err:
@@ -244,12 +278,12 @@ class NecProjector:
     async def model_name(self) -> str:
         """MODEL NAME REQUEST (078-5.)."""
         response = await self.client.request(0x00, 0x85, bytes((0x04,)))
-        return cstring(response.data)
+        return cstring(response.data, limit=MAX_NAME_LENGTH)
 
     async def serial_number(self) -> str:
         """VERSION DATA REQUEST (005-2.), version type 08H."""
-        response = await self.client.request(0x00, 0x86, bytes((0x08,)))
-        return cstring(response.data, 1)
+        response = await self.client.request(0x00, 0x86, bytes((0x08,)), private=True)
+        return cstring(response.data, 1, limit=MAX_NAME_LENGTH)
 
     async def projector_info(self) -> tuple[tuple[int, int, int], int | None]:
         """SETTING REQUEST (078-1.): the projector type and its sub type.
@@ -285,7 +319,7 @@ class NecProjector:
         if len(data) < 18:
             return f"Sensor {index + 1}"
         length = data[16]
-        return cstring(data, 17, length) or f"Sensor {index + 1}"
+        return cstring(data, 17, length, limit=MAX_NAME_LENGTH) or f"Sensor {index + 1}"
 
     # ---------------------------------------------------------------- polling
 

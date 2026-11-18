@@ -12,7 +12,7 @@ from custom_components.nec_cinema.const import CONF_MACROS, CONF_PROJECTOR_ID, D
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 
 from .conftest import ENTRY_DATA, HOST, PORT, SERIAL, FakeProjector
 
@@ -100,6 +100,47 @@ async def test_user_flow_errors(
     assert result["type"] is FlowResultType.CREATE_ENTRY
 
 
+@pytest.mark.parametrize(
+    "host",
+    ["http://192.0.2.10", "192.0.2.10:43728", "192.0.2.10/admin", "two words", "-booth.lan", ""],
+)
+async def test_user_flow_invalid_host(
+    hass: HomeAssistant, projector: FakeProjector, host: str
+) -> None:
+    """Text that is not an address is turned down before anything is sent to it."""
+    projector.model_name = AsyncMock(return_value="NC-Series")
+    result = await _start(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, CONF_HOST: host}
+    )
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {CONF_HOST: "invalid_host"}
+    projector.model_name.assert_not_awaited()
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+@pytest.mark.parametrize(
+    ("typed", "stored"),
+    [
+        (f"  {HOST} ", HOST),
+        ("booth-1.cinema.lan", "booth-1.cinema.lan"),
+        ("[2001:db8::10]", "2001:db8::10"),
+    ],
+)
+async def test_user_flow_host_is_cleaned(
+    hass: HomeAssistant, projector: FakeProjector, typed: str, stored: str
+) -> None:
+    """Spaces and IPv6 brackets around the address are dropped; host names are fine."""
+    result = await _start(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**USER_INPUT, CONF_HOST: typed}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_HOST] == stored
+
+
 async def test_already_configured_serial(
     hass: HomeAssistant, projector: FakeProjector, mock_config_entry: MockConfigEntry
 ) -> None:
@@ -139,6 +180,19 @@ async def test_options_flow(hass: HomeAssistant, mock_config_entry: MockConfigEn
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert mock_config_entry.options == {"scan_interval": 30, CONF_MACROS: "1: Flat, 2: Scope"}
+
+
+async def test_options_flow_macros_too_long(
+    hass: HomeAssistant, mock_config_entry: MockConfigEntry
+) -> None:
+    """An absurdly long list of macro names is not stored."""
+    mock_config_entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(mock_config_entry.entry_id)
+    with pytest.raises(InvalidData):
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {"scan_interval": 30, CONF_MACROS: "1: " + "x" * 3000}
+        )
+    assert mock_config_entry.options == {}
 
 
 async def test_projector_id_is_kept(hass: HomeAssistant, projector: FakeProjector) -> None:

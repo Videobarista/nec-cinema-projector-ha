@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 import logging
@@ -10,7 +11,8 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 from homeassistant.util import dt as dt_util
@@ -87,6 +89,68 @@ SAVE_DELAY = 10
 # Longest believable cooling timer, in seconds. The projector fills the field
 # with FFFFH outside the cooling phase; anything this long is not a timer.
 MAX_COOLING_TIME = 3600
+
+# What the projector reports is not taken at face value. A head claiming 255
+# thermal sensors would get 255 entities and as many requests every slow poll;
+# the heads seen so far have four to eight.
+MAX_THERMAL_SENSORS = 32
+
+# Preset keys and the longest name remembered for one. The projector reports
+# the key in one byte and the name with a one byte length.
+MAX_PRESET_NUMBER = 256
+MAX_TITLE_LENGTH = 255
+
+# Longest a poll, or the probe at setup, may take as a whole, in seconds.
+# Every request has its own limit, but a projector that answers each one just
+# in time would otherwise stretch a poll to many minutes.
+POLL_TIMEOUT = 45
+PROBE_TIMEOUT = 90
+
+# Commands are followed by a refresh so the entities show the result. Commands
+# arriving faster than this, in seconds, share one refresh, so an automation
+# pressing buttons in a loop does not flood the projector with status requests.
+REFRESH_COOLDOWN = 1.0
+
+LAMP_OUTPUT_KINDS = (None, "watt", "percent")
+
+
+def clean_device(device: Any) -> dict[str, Any] | None:
+    """Return a stored probe in a form that can be relied on, or None.
+
+    The storage file is written by this integration, but a file damaged by a
+    full disk or edited by hand must not keep the projector from setting up.
+    A probe that cannot be used is dropped, and the projector is asked again.
+    """
+    if not isinstance(device, dict):
+        return None
+    sources = device.get("sources")
+    names = device.get("thermal_names")
+    kind = device.get("projector_type")
+    subtype = device.get("model_subtype")
+    serial = device.get("serial")
+    if not isinstance(sources, dict) or not isinstance(names, list):
+        return None
+    try:
+        clean_sources = {str(name): int(code) for name, code in sources.items()}
+        clean_kind = [int(kind[0]), int(kind[1]), int(kind[2])] if kind else None
+        clean_subtype = int(subtype) if subtype is not None else None
+    except (TypeError, ValueError, IndexError, KeyError):
+        return None
+    output_kind = device.get("lamp_output_kind")
+    return {
+        "model": str(device.get("model") or "") or None,
+        "serial": str(serial) if serial else None,
+        "projector_type": clean_kind,
+        "model_subtype": clean_subtype,
+        "legacy_lamp": bool(device.get("legacy_lamp")),
+        "legacy_temps": bool(device.get("legacy_temps")),
+        "lamp_output_kind": output_kind if output_kind in LAMP_OUTPUT_KINDS else None,
+        "lamp_details": bool(device.get("lamp_details")),
+        "has_lamp2": bool(device.get("has_lamp2")),
+        "has_lamp_mode": bool(device.get("has_lamp_mode")),
+        "sources": clean_sources,
+        "thermal_names": [str(name) for name in names[:MAX_THERMAL_SENSORS]],
+    }
 
 
 @dataclass
@@ -185,6 +249,8 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         self._needs_probe = False
         self._reachable: bool | None = None
         self._skip_poll = False
+        self._command_refresh_at = float("-inf")
+        self._trailing_refresh: CALLBACK_TYPE | None = None
 
     # ------------------------------------------------------------------ setup
 
@@ -218,12 +284,33 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             self._device = self._device_info()
             self._save()
 
+    async def _within(
+        self, seconds: float, call: Callable[[], Awaitable[None]], what: str
+    ) -> None:
+        """Run a series of requests with a limit on the time they take together.
+
+        Running out of time is reported like a lost connection, and the
+        connection is dropped: an answer still under way would otherwise be
+        taken for the answer to the next request.
+        """
+        try:
+            async with asyncio.timeout(seconds):
+                await call()
+        except TimeoutError as err:
+            await self.client.close()
+            raise NecConnectionError(f"{what} not finished within {seconds:g} s") from err
+
     async def _probe_live(self) -> None:
         """Ask the projector for its identity and capabilities.
 
         A lost connection aborts the whole probe, so a half answered probe is
-        never taken for a projector with fewer features.
+        never taken for a projector with fewer features. So does a projector
+        that takes longer over it than any head needs.
         """
+        await self._within(PROBE_TIMEOUT, self._probe_steps, "probe")
+
+    async def _probe_steps(self) -> None:
+        """Run the requests of a probe, one after the other."""
         self._reset_device()
         reported = await self.projector.model_name()
 
@@ -297,21 +384,21 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         }
 
     def _apply_device(self, device: dict[str, Any]) -> None:
-        """Take over what an earlier probe found."""
+        """Take over what an earlier probe found, as checked by clean_device."""
         self._reset_device()
-        self.model = str(device.get("model") or self.model)
-        self.serial = device.get("serial") or None
-        kind = device.get("projector_type")
+        self.model = device["model"] or self.model
+        self.serial = device["serial"]
+        kind = device["projector_type"]
         self.projector_type = (kind[0], kind[1], kind[2]) if kind else None
-        self.model_subtype = device.get("model_subtype")
-        self._legacy_lamp = bool(device.get("legacy_lamp"))
-        self._legacy_temps = bool(device.get("legacy_temps"))
-        self.lamp_output_kind = device.get("lamp_output_kind")
-        self.lamp_details = bool(device.get("lamp_details"))
-        self.has_lamp2 = bool(device.get("has_lamp2"))
-        self.has_lamp_mode = bool(device.get("has_lamp_mode"))
-        self.source_map = {str(name): int(code) for name, code in device["sources"].items()}
-        self.thermal_names = [str(name) for name in device["thermal_names"]]
+        self.model_subtype = device["model_subtype"]
+        self._legacy_lamp = device["legacy_lamp"]
+        self._legacy_temps = device["legacy_temps"]
+        self.lamp_output_kind = device["lamp_output_kind"]
+        self.lamp_details = device["lamp_details"]
+        self.has_lamp2 = device["has_lamp2"]
+        self.has_lamp_mode = device["has_lamp_mode"]
+        self.source_map = dict(device["sources"])
+        self.thermal_names = list(device["thermal_names"])
 
     @staticmethod
     def _entity_set(device: dict[str, Any]) -> tuple[Any, ...]:
@@ -358,11 +445,13 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         """Read what was remembered in earlier sessions."""
         stored = await self._store.async_load()
         if isinstance(stored, dict):
-            self._learned = {
-                int(key): str(value)
-                for key, value in stored.get("macros", {}).items()
-                if str(key).isdigit()
-            }
+            macros = stored.get("macros")
+            if isinstance(macros, dict):
+                self._learned = {
+                    int(key): str(value)[:MAX_TITLE_LENGTH]
+                    for key, value in macros.items()
+                    if str(key).isdecimal() and 1 <= int(key) <= MAX_PRESET_NUMBER
+                }
             # Version 1.10 stored a wanted light control mode; "off" meant the
             # same as starting dark does now.
             self.start_dark = bool(
@@ -372,12 +461,13 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             if isinstance(learned, int) and 0 < learned <= MAX_COOLING_TIME:
                 self._cooling_learned = learned
             device = stored.get("device")
-            if (
-                isinstance(device, dict)
-                and isinstance(device.get("sources"), dict)
-                and isinstance(device.get("thermal_names"), list)
-            ):
-                self._device = device
+            self._device = clean_device(device)
+            if device is not None and self._device is None:
+                _LOGGER.warning(
+                    "%s: what the projector reported last time could not be read back "
+                    "from storage; asking the projector again",
+                    self.entry.title,
+                )
 
     @property
     def learned_macros(self) -> dict[int, str]:
@@ -573,8 +663,10 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
 
         try:
             await self.projector.light_power()
-        except NecNakError:
-            pass
+        except NecNakError as err:
+            # Refused: either not supported or the lamp is off. Try the other
+            # command below before deciding.
+            _LOGGER.debug("lamp power in percent refused: %s", err)
         except NecConnectionError:
             raise
         except NecError as err:
@@ -614,6 +706,14 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             raise
         except NecError:
             count = 0
+        if count > MAX_THERMAL_SENSORS:
+            _LOGGER.warning(
+                "%s reports %s thermal sensors; only the first %s are used",
+                self.entry.title,
+                count,
+                MAX_THERMAL_SENSORS,
+            )
+            count = MAX_THERMAL_SENSORS
         if count:
             names: list[str] = []
             for index in range(count):
@@ -655,7 +755,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
             self._skip_poll = False
             return data
         try:
-            await self._poll_fast(data)
+            await self._within(POLL_TIMEOUT, lambda: self._poll_fast(data), "status poll")
         except NecError as err:
             if self._reachable is not False:
                 _LOGGER.info("%s is not reachable, showing it as off: %s", self.entry.title, err)
@@ -682,19 +782,34 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         )
         previous = self.data
         if slow_due:
-            await self._poll_slow(data)
-        elif previous is not None:
-            data.errors = previous.errors
-            data.light_hours = previous.light_hours
-            data.light_warning_hours = previous.light_warning_hours
-            data.light_remaining = previous.light_remaining
-            data.light_strikes = previous.light_strikes
-            data.lamp2_hours = previous.lamp2_hours
-            data.lamp2_remaining = previous.lamp2_remaining
-            data.lamp2_strikes = previous.lamp2_strikes
-            data.light_power = previous.light_power
-            data.temperatures = previous.temperatures
+            try:
+                await self._within(
+                    POLL_TIMEOUT, lambda: self._poll_slow(data), "housekeeping poll"
+                )
+            except NecConnectionError as err:
+                # Keep showing the last values rather than blanks; they are
+                # read again on the next slow poll.
+                _LOGGER.debug("%s; the rest is read next time", err)
+                self._carry_slow(data, previous)
+        else:
+            self._carry_slow(data, previous)
         return data
+
+    @staticmethod
+    def _carry_slow(data: ProjectorData, previous: ProjectorData | None) -> None:
+        """Copy the housekeeping values of the previous poll."""
+        if previous is None:
+            return
+        data.errors = previous.errors
+        data.light_hours = previous.light_hours
+        data.light_warning_hours = previous.light_warning_hours
+        data.light_remaining = previous.light_remaining
+        data.light_strikes = previous.light_strikes
+        data.lamp2_hours = previous.lamp2_hours
+        data.lamp2_remaining = previous.lamp2_remaining
+        data.lamp2_strikes = previous.lamp2_strikes
+        data.light_power = previous.light_power
+        data.temperatures = previous.temperatures
 
     async def _poll_fast(self, data: ProjectorData) -> None:
         """Read the values that matter for control."""
@@ -921,8 +1036,7 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
         method = getattr(self.projector, action)
         for attempt in range(1, COMMAND_ATTEMPTS + 1):
             try:
-                async with asyncio.timeout(20):
-                    await method(*args)
+                await method(*args)
             except NecNakError as err:
                 if err.code not in TRANSIENT_NAK_CODES:
                     self._record_error(action, "refused", err)
@@ -984,4 +1098,38 @@ class NecCinemaCoordinator(DataUpdateCoordinator[ProjectorData]):
                 self._pending.pop(DEFERRABLE_ACTIONS.get(action, ""), None)
                 self._record(action, "ok", f"{action}: accepted")
                 break
-        await self.async_refresh()
+        await self._refresh_after_command()
+
+    async def _refresh_after_command(self) -> None:
+        """Refresh after a command, at most once per REFRESH_COOLDOWN.
+
+        A single command is followed by a refresh straight away, so the
+        entities show the result at once. Commands arriving in quick
+        succession share one refresh at the end of the cooldown, and that one
+        always starts after the last of them.
+        """
+        if self._trailing_refresh is not None:
+            return
+        now = self.hass.loop.time()
+        wait = self._command_refresh_at + REFRESH_COOLDOWN - now
+        if wait <= 0:
+            self._command_refresh_at = now
+            await self.async_refresh()
+            return
+        self._trailing_refresh = async_call_later(self.hass, wait, self._run_trailing_refresh)
+
+    @callback
+    def _run_trailing_refresh(self, _now: datetime) -> None:
+        """Refresh once for the commands that arrived during the cooldown."""
+        self._trailing_refresh = None
+        self._command_refresh_at = self.hass.loop.time()
+        self.entry.async_create_background_task(
+            self.hass, self.async_refresh(), f"{DOMAIN} refresh after command"
+        )
+
+    async def async_shutdown(self) -> None:
+        """Cancel the refresh still waiting for the cooldown, then shut down."""
+        if self._trailing_refresh is not None:
+            self._trailing_refresh()
+            self._trailing_refresh = None
+        await super().async_shutdown()

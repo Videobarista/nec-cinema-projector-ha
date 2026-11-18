@@ -295,6 +295,36 @@ document, so the right ones are used without guessing:
 - `PICTURE MUTE OFF` does nothing while the douser is closed — that is the projector's behaviour,
   not a bug in the integration.
 
+## Network security
+
+The control port of the projector (TCP 43728) has **no password and no encryption**. Anyone who
+can reach it can switch the projector on and off, light the lamp and open the douser, with or
+without Home Assistant. This integration cannot change that; the network has to. A sensible
+setup:
+
+- Put the projector, and the media block or cinema server that belongs to it, in a VLAN of their
+  own.
+- Allow only the Home Assistant host (with a fixed IP address) to reach the projector on
+  **TCP 43728**. Home Assistant needs nothing else from it.
+- Allow an admin workstation (NEC Communicator, the web page) to reach TCP 80 and 43728-43729
+  only, preferably from a management VLAN.
+- Block everything else towards the projector from other networks. Besides the control port, the
+  head listens on echo (7), HTTP (80, unencrypted), SNMP (161) and several Enigma, ICP, SIB and
+  IMB control ports in the 43680-43759 range.
+- Give the projector no internet access and never forward any of its ports from the internet.
+  Keep guest and office Wi-Fi out of this VLAN.
+
+What the integration does on its side:
+
+- It opens no ports, webhooks or listeners; it only connects out to the projector.
+- It uses one connection and sends one request at a time. Commands in quick succession share one
+  status refresh, and an unreachable projector is tried once per polling interval.
+- Everything the projector sends is checked before use: frame length and checksum, a time limit
+  per request and per poll, names cut to 64 characters, at most 32 thermal sensors.
+- Diagnostics leave out the IP address and the serial number, and the debug log does not show
+  the answer that carries the serial number.
+- Every Home Assistant user, admin or not, can operate the projector. Limit who has an account.
+
 ## Quality scale
 
 This integration is aligned with the **Bronze** tier of the

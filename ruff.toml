@@ -7,9 +7,14 @@ select = [
   "E",   # pycodestyle errors
   "F",   # pyflakes: unused imports, undefined names
   "I",   # isort: import order
+  "S",   # flake8-bandit: security pitfalls (eval, subprocess, swallowed errors)
   "UP",  # pyupgrade: outdated syntax
   "W",   # pycodestyle warnings
 ]
+
+[lint.per-file-ignores]
+# pytest tests are written with plain assert statements.
+"tests/*" = ["S101"]
 
 [lint.isort]
 force-sort-within-sections = true

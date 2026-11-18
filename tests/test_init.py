@@ -2,18 +2,27 @@
 
 from __future__ import annotations
 
+import asyncio
+from datetime import timedelta
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.nec_cinema.const import DOMAIN
+from custom_components.nec_cinema.coordinator import MAX_THERMAL_SENSORS, clean_device
+from custom_components.nec_cinema.diagnostics import async_get_config_entry_diagnostics
+from custom_components.nec_cinema.select import MAX_MACRO_LABEL, parse_macros
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import STATE_OFF, STATE_ON, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.util import dt as dt_util
 
-from .conftest import SERIAL, FakeDualLampProjector, FakeProjector
+from .conftest import HOST, SERIAL, STORAGE_KEY, STORED_DEVICE, FakeDualLampProjector, FakeProjector
+
+COORDINATOR = "custom_components.nec_cinema.coordinator"
 
 
 def _entity_id(hass: HomeAssistant, platform: str, key: str) -> str:
@@ -289,3 +298,148 @@ async def test_cooling_bar_after_light_off(
     dual_projector.lockout = 0
     await coordinator.async_refresh()
     assert coordinator.data.cooling_progress == 0
+
+
+# ---------------------------------------------------------------- hardening
+
+
+async def test_thermal_sensor_count_is_capped(
+    hass: HomeAssistant, projector: FakeProjector, mock_config_entry: MockConfigEntry
+) -> None:
+    """A head claiming hundreds of thermal sensors does not get hundreds of entities."""
+    projector.thermal_sensor_count = AsyncMock(return_value=200)
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+
+    assert len(mock_config_entry.runtime_data.thermal_names) == MAX_THERMAL_SENSORS
+    registry = er.async_get(hass)
+    last = f"{SERIAL}_temperature_{MAX_THERMAL_SENSORS - 1}"
+    beyond = f"{SERIAL}_temperature_{MAX_THERMAL_SENSORS}"
+    assert registry.async_get_entity_id("sensor", DOMAIN, last) is not None
+    assert registry.async_get_entity_id("sensor", DOMAIN, beyond) is None
+
+
+async def test_slow_projector_shows_as_off(
+    hass: HomeAssistant, projector: FakeProjector, mock_config_entry: MockConfigEntry
+) -> None:
+    """A projector that does not finish answering a poll in time counts as unreachable."""
+    await _setup(hass, mock_config_entry)
+
+    async def never() -> dict[str, Any]:
+        await asyncio.sleep(3600)
+        return {}
+
+    projector.running_status = never
+    with patch(f"{COORDINATOR}.POLL_TIMEOUT", 0.2):
+        await mock_config_entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert _state(hass, "media_player", "projector") == STATE_OFF
+    assert _state(hass, "binary_sensor", "connectivity") == STATE_OFF
+
+
+async def test_slow_housekeeping_keeps_the_projector_on(
+    hass: HomeAssistant, projector: FakeProjector, mock_config_entry: MockConfigEntry
+) -> None:
+    """Housekeeping values that take too long are left for the next round."""
+
+    async def never(count: int) -> list[float | None]:
+        await asyncio.sleep(3600)
+        return []
+
+    projector.temperatures_legacy = never
+    with patch(f"{COORDINATOR}.POLL_TIMEOUT", 0.2):
+        await _setup(hass, mock_config_entry)
+
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert _state(hass, "media_player", "projector") == STATE_ON
+    assert _state(hass, "sensor", "process_status") == "running_light_on"
+
+
+async def test_commands_in_a_burst_share_one_refresh(
+    hass: HomeAssistant, projector: FakeProjector, mock_config_entry: MockConfigEntry
+) -> None:
+    """One command refreshes at once; a burst is followed by a single refresh."""
+    await _setup(hass, mock_config_entry)
+    cover = _entity_id(hass, "cover", "douser")
+    polls = AsyncMock(side_effect=projector.running_status)
+    projector.running_status = polls
+
+    # Shorter than the polling interval, so no regular poll gets in between.
+    with patch(f"{COORDINATOR}.REFRESH_COOLDOWN", 5.0):
+        for _ in range(5):
+            await hass.services.async_call(
+                "cover", "close_cover", {"entity_id": cover}, blocking=True
+            )
+        assert projector.douser_close.await_count == 5
+        # The first command was followed by a refresh straight away ...
+        assert polls.await_count == 1
+
+        # ... and the other four share one, once the cooldown is over.
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=6))
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert polls.await_count == 2
+
+
+async def test_damaged_storage_does_not_break_setup(
+    hass: HomeAssistant,
+    projector: FakeProjector,
+    mock_config_entry: MockConfigEntry,
+    stored_device: dict[str, Any],
+) -> None:
+    """Stored details that cannot be read back are dropped and asked for again."""
+    stored_device[STORAGE_KEY]["data"]["device"] = {
+        **STORED_DEVICE,
+        "sources": {"IMB": "not a number"},
+    }
+    stored_device[STORAGE_KEY]["data"]["macros"] = ["not", "a", "mapping"]
+
+    projector.online = False
+    await _setup(hass, mock_config_entry)
+    assert mock_config_entry.state is ConfigEntryState.SETUP_RETRY
+
+    projector.online = True
+    await hass.config_entries.async_reload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert mock_config_entry.state is ConfigEntryState.LOADED
+    assert _state(hass, "media_player", "projector") == STATE_ON
+
+
+def test_clean_device() -> None:
+    """Only a complete, well formed stored probe is used."""
+    assert clean_device(STORED_DEVICE) == STORED_DEVICE
+    assert clean_device(None) is None
+    assert clean_device("NC1200C") is None
+    assert clean_device({**STORED_DEVICE, "thermal_names": "DMD"}) is None
+    assert clean_device({**STORED_DEVICE, "projector_type": [0x0C]}) is None
+    assert clean_device({**STORED_DEVICE, "model_subtype": "x"}) is None
+
+    many = clean_device({**STORED_DEVICE, "thermal_names": [f"T{i}" for i in range(500)]})
+    assert many is not None
+    assert len(many["thermal_names"]) == MAX_THERMAL_SENSORS
+    odd = clean_device({**STORED_DEVICE, "lamp_output_kind": "volts"})
+    assert odd is not None
+    assert odd["lamp_output_kind"] is None
+
+
+def test_parse_macros() -> None:
+    """Hand written preset names are checked, not trusted."""
+    assert parse_macros("1: Flat, 2: Scope") == {1: "Flat", 2: "Scope"}
+    assert parse_macros(None) == {}
+    # Not a number, out of range, without a name, or a digit int() cannot read.
+    assert parse_macros("x: A, 0: B, 21: C, 3:, \u00b2: D, 4") == {}
+    assert parse_macros("5: " + "N" * 500) == {5: "N" * MAX_MACRO_LABEL}
+
+
+async def test_diagnostics_hide_address_and_serial(
+    hass: HomeAssistant, projector: FakeProjector, mock_config_entry: MockConfigEntry
+) -> None:
+    """The address and the serial number do not end up in a diagnostics file."""
+    await _setup(hass, mock_config_entry)
+    diagnostics = await async_get_config_entry_diagnostics(hass, mock_config_entry)
+
+    assert diagnostics["model"] == "NC1200C"
+    assert diagnostics["state"]["process_status"] == "running_light_on"
+    assert HOST not in str(diagnostics)
+    assert SERIAL not in str(diagnostics)

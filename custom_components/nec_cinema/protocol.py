@@ -166,7 +166,16 @@ def u32le(data: bytes, offset: int) -> int:
     return int.from_bytes(data[offset : offset + 4], "little", signed=False)
 
 
-def cstring(data: bytes, offset: int = 0, length: int | None = None) -> str:
-    """Decode a NUL terminated ASCII string."""
+def cstring(
+    data: bytes, offset: int = 0, length: int | None = None, limit: int | None = None
+) -> str:
+    """Decode a NUL terminated ASCII string.
+
+    What the projector sends is not trusted to be clean text: bytes outside
+    ASCII become the replacement character, control characters are dropped and
+    ``limit`` caps the length of names that end up in identifiers and titles.
+    """
     chunk = data[offset:] if length is None else data[offset : offset + length]
-    return chunk.split(b"\x00", 1)[0].decode("ascii", errors="replace").strip()
+    text = chunk.split(b"\x00", 1)[0].decode("ascii", errors="replace")
+    text = "".join(char for char in text if char.isprintable()).strip()
+    return text[:limit].rstrip() if limit else text

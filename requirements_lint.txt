@@ -1,0 +1,2 @@
+# Linter used by the Ruff workflow, pinned so a new release cannot change the result unnoticed.
+ruff==0.16.9

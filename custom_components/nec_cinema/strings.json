@@ -20,6 +20,7 @@
     },
     "error": {
       "cannot_connect": "No answer on the control port. Check the IP address and whether external control is enabled on the projector.",
+      "invalid_host": "This is not an IP address or host name. Enter the address only, without http:// and without a port.",
       "refused": "The projector answered but refused the command.",
       "unknown": "Unexpected error. Check the Home Assistant log for details."
     },

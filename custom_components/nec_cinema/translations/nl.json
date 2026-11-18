@@ -20,6 +20,7 @@
     },
     "error": {
       "cannot_connect": "Geen antwoord op de besturingspoort. Controleer het IP-adres en of externe besturing op de projector aanstaat.",
+      "invalid_host": "Dit is geen IP-adres of hostnaam. Vul alleen het adres in, zonder http:// en zonder poort.",
       "refused": "De projector antwoordde wel, maar weigerde het commando.",
       "unknown": "Onverwachte fout. Kijk in het Home Assistant-log voor details."
     },

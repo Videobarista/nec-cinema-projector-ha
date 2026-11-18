@@ -271,6 +271,16 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Let Home Assistant load the integration from custom_components."""
 
 
+@pytest.fixture(autouse=True)
+def no_refresh_cooldown() -> Generator[None]:
+    """Refresh after every command at once, so tests can check the result.
+
+    The test of the cooldown itself switches it back on.
+    """
+    with patch("custom_components.nec_cinema.coordinator.REFRESH_COOLDOWN", 0):
+        yield
+
+
 @pytest.fixture
 def projector() -> Generator[FakeProjector]:
     """Patch the protocol layer everywhere it is created; return the fake head."""

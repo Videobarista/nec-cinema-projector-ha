@@ -12,14 +12,23 @@ from .const import CONF_MACROS, LAMP_MODE_CODES, LAMP_MODE_UNKNOWN, LAMP_MODES
 from .coordinator import NecCinemaConfigEntry, NecCinemaCoordinator
 from .entity import NecCinemaEntity
 
+# Longest preset name taken from the options; longer ones are cut off.
+MAX_MACRO_LABEL = 64
+
 
 def parse_macros(raw: str | None) -> dict[int, str]:
-    """Parse a macro definition such as "1: Flat, 2: Scope" into a mapping."""
+    """Parse a macro definition such as "1: Flat, 2: Scope" into a mapping.
+
+    The text is typed by hand, so anything that is not a number from 1 to 20
+    followed by a name is skipped rather than trusted.
+    """
     macros: dict[int, str] = {}
     for part in (raw or "").split(","):
         number, _, label = part.partition(":")
-        number, label = number.strip(), label.strip()
-        if not number.isdigit() or not label:
+        number, label = number.strip(), label.strip()[:MAX_MACRO_LABEL].rstrip()
+        # isdecimal, not isdigit: the latter also accepts characters such as a
+        # superscript two, which int() cannot convert.
+        if not number.isdecimal() or len(number) > 2 or not label:
             continue
         index = int(number)
         if 1 <= index <= 20:

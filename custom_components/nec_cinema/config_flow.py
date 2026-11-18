@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -24,6 +26,35 @@ from .const import (
 from .coordinator import resolve_model
 
 _LOGGER = logging.getLogger(__name__)
+
+# Longest text accepted for the hand written preset names in the options.
+MAX_MACROS_LENGTH = 2000
+
+# A host name: labels of letters, digits, hyphens and underscores, separated
+# by dots. Anything else, such as a scheme, a path or a port, is not one.
+_HOSTNAME = re.compile(
+    r"(?!-)[A-Za-z0-9_-]{1,63}(?<!-)(?:\.(?!-)[A-Za-z0-9_-]{1,63}(?<!-))*\.?"
+)
+
+
+def clean_host(value: str) -> str | None:
+    """Return the address to connect to, or None when the text is not one.
+
+    The field is free text, so it is checked before anything is sent to it:
+    surrounding spaces and the brackets of an IPv6 address are dropped, and a
+    URL, a path or an address with a port is turned down with a clear message
+    instead of a connection error.
+    """
+    host = value.strip()
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        if len(host) > 253 or not _HOSTNAME.fullmatch(host):
+            return None
+    return host
+
 
 USER_SCHEMA = vol.Schema(
     {
@@ -73,33 +104,34 @@ class NecCinemaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Ask for the address of the projector."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            self._async_abort_entries_match({CONF_HOST: user_input[CONF_HOST]})
-            try:
-                model, serial = await _probe(
-                    user_input[CONF_HOST],
-                    user_input[CONF_PORT],
-                    user_input[CONF_PROJECTOR_ID],
-                )
-            except NecNakError:
-                errors["base"] = "refused"
-            except NecError:
-                errors["base"] = "cannot_connect"
-            except Exception:
-                _LOGGER.exception("unexpected error while contacting the projector")
-                errors["base"] = "unknown"
+            host = clean_host(user_input[CONF_HOST])
+            if host is None:
+                errors[CONF_HOST] = "invalid_host"
             else:
-                await self.async_set_unique_id(
-                    serial or f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}"
-                )
-                self._abort_if_unique_id_configured()
-                title = user_input[CONF_NAME]
-                if title == DEFAULT_NAME and model:
-                    title = model
-                return self.async_create_entry(title=title, data=user_input)
+                user_input = {**user_input, CONF_HOST: host}
+                self._async_abort_entries_match({CONF_HOST: host})
+                try:
+                    model, serial = await _probe(
+                        host, user_input[CONF_PORT], user_input[CONF_PROJECTOR_ID]
+                    )
+                except NecNakError:
+                    errors["base"] = "refused"
+                except NecError:
+                    errors["base"] = "cannot_connect"
+                except Exception:
+                    _LOGGER.exception("unexpected error while contacting the projector")
+                    errors["base"] = "unknown"
+                else:
+                    await self.async_set_unique_id(serial or f"{host}:{user_input[CONF_PORT]}")
+                    self._abort_if_unique_id_configured()
+                    title = user_input[CONF_NAME]
+                    if title == DEFAULT_NAME and model:
+                        title = model
+                    return self.async_create_entry(title=title, data=user_input)
 
-        return self.async_show_form(
-            step_id="user", data_schema=USER_SCHEMA, errors=errors
-        )
+        # Keep what was typed when the form comes back with an error.
+        schema = self.add_suggested_values_to_schema(USER_SCHEMA, user_input)
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
     @staticmethod
     @callback
@@ -125,9 +157,9 @@ class NecCinemaOptionsFlow(OptionsFlow):
                     "scan_interval",
                     default=options.get("scan_interval", DEFAULT_SCAN_INTERVAL),
                 ): vol.All(vol.Coerce(int), vol.Range(min=MIN_SCAN_INTERVAL, max=300)),
-                vol.Optional(
-                    CONF_MACROS, default=options.get(CONF_MACROS, "")
-                ): str,
+                vol.Optional(CONF_MACROS, default=options.get(CONF_MACROS, "")): vol.All(
+                    str, vol.Length(max=MAX_MACROS_LENGTH)
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=schema)
